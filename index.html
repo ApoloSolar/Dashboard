@@ -772,28 +772,6 @@
       border-top: 1px solid rgba(248,81,73,.25);
     }
 
-    /* ─── Mini-grafico de pot. instantanea por inversor (card expandido) ─── */
-    .mini-chart-wrap {
-      margin: 8px 16px 12px;
-      padding: 12px;
-      background: rgba(255, 155, 34, 0.04);
-      border: 1px solid rgba(255, 155, 34, 0.18);
-      border-radius: 8px;
-    }
-    .mini-chart-title {
-      font-size: 11px;
-      color: var(--text3);
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      margin-bottom: 8px;
-      font-weight: 500;
-    }
-    .mini-chart-box {
-      position: relative;
-      height: 200px;        /* tamanho medio conforme acordado */
-    }
-    .mini-chart-box canvas { width: 100% !important; height: 100% !important; }
-
     /* ───────────────────────────────────────────────────────── FOOTER ── */
     .footer {
       font-family: 'IBM Plex Mono', monospace;
@@ -1331,9 +1309,13 @@
   <div class="date-bar">
     <div class="modo-toggle" role="group" aria-label="Modo de visualização">
       <button type="button" class="mt-btn ativo" data-modo="diario" onclick="trocarModo('diario')">Diário</button>
-      <button type="button" class="mt-btn"       data-modo="mensal" onclick="trocarModo('mensal')">Mensal</button>
-      <button type="button" class="mt-btn"       data-modo="anual"  onclick="trocarModo('anual')">Anual</button>
+      <button type="button" class="mt-btn"       data-modo="mensal" onclick="trocarModo('mensal')" title="Desativado nesta versão de teste" style="opacity:.45">Mensal</button>
+      <button type="button" class="mt-btn"       data-modo="anual"  onclick="trocarModo('anual')" title="Desativado nesta versão de teste" style="opacity:.45">Anual</button>
     </div>
+    <label style="margin-left:12px;font-size:.8rem;opacity:.8">API:</label>
+    <input type="text" class="date-input" id="api-url-input"
+           value="https://backend-api-production-a7c9.up.railway.app"
+           style="min-width:340px" title="Endereço da API (configurável)">
     <label id="lbl-data" style="margin-left:8px">Visualizar data:</label>
     <input type="date"   class="date-input" id="date-picker"  max="2099-12-31">
     <input type="month"  class="date-input" id="month-picker" style="display:none" max="2099-12">
@@ -1426,6 +1408,25 @@
 <!-- /conteudo -->
 
 <script>
+// ============================================================
+//  V70 - INTEGRACAO COM A API (Railway)
+// ------------------------------------------------------------
+//  Nesta versao, o MODO DIARIO le os dados da API em vez do CSV.
+//  Os modos mensal e anual estao DESATIVADOS para esta fase de
+//  teste (serao migrados quando a API tiver os endpoints deles).
+//
+//  A URL da API e configuravel: o valor abaixo e o padrao, mas
+//  pode ser trocado pelo campo no topo do dashboard.
+// ============================================================
+let API_URL = "https://backend-api-production-a7c9.up.railway.app";
+
+// Le a URL da API do campo configuravel (se existir)
+function getApiUrl() {
+  const campo = document.getElementById("api-url-input");
+  const v = campo && campo.value ? campo.value.trim() : API_URL;
+  return v.replace(/\/+$/, "");   // remove barra(s) final(is)
+}
+
 // ===== PREVISAO DO TEMPO (Open-Meteo) =====
 const USINAS_COORDS = {
   pk:       { lat: -21.10, lon: -41.04, nome: "Pres. Kennedy / ES", topbar: "Presidente Kennedy", inversores: 8 },
@@ -1671,14 +1672,6 @@ const pacHistory   = new Array(1440).fill(null);
 const enrgHistory  = new Array(96).fill(null);
 let chartTotal, chartEnergia, countdownVal = INTERVALO, countdownTimer;
 
-// Mini-graficos dentro de cada card de inversor expandido.
-// pacPorInvHoje:  { "Inversor 1": [{x: "06:00", y: 12.3}, ...], "Inversor 2": [...] }
-// miniCharts:     { 0: ChartJS, 1: ChartJS, ... } indexado por idx do card
-// Estado e zerado a cada parseCSV (novo dia/usina). Os charts sao destruidos
-// antes da reconstrucao para evitar memory leaks do Chart.js.
-let pacPorInvHoje = {};
-const miniCharts  = {};
-
 function $(id) { return document.getElementById(id); }
 function set(id, v) { const e=$(id); if(e) e.textContent=v; }
 function fmt(v, d=2) { return (+v||0).toFixed(d); }
@@ -1841,6 +1834,16 @@ let anoSelecionado   = parseInt(hojeStr().slice(0, 4)); // 2026
 function trocarModo(novo) {
   if (!["diario", "mensal", "anual"].includes(novo)) return;
   if (novo === modoVisao) return;
+
+  // V70: modos mensal e anual desativados nesta fase de teste.
+  // Serao reativados quando a API tiver os endpoints de resumo.
+  if (novo === "mensal" || novo === "anual") {
+    alert("Os modos Mensal e Anual estao desativados nesta versao de teste "
+        + "(V70). Apenas o modo Diario consome a API. Os outros modos serao "
+        + "reativados na proxima fase.");
+    return;
+  }
+
   modoVisao = novo;
 
   // Atualiza estado visual do toggle
@@ -1992,6 +1995,146 @@ function atualizarBadgeData() {
 }
 
 // ── Parse CSV ─────────────────────────────────────────────────────────────────
+// ============================================================
+//  V70 - BUSCA DO MODO DIARIO VIA API
+// ------------------------------------------------------------
+//  Le os endpoints /dia e /dia/.../canais da API e monta o
+//  MESMO objeto que parseCSV() produz, para que todo o resto
+//  do codigo do modo diario funcione sem alteracao.
+// ============================================================
+async function buscarDiaAPI(dataStr) {
+  const base = getApiUrl();
+
+  // Busca leituras e canais em paralelo
+  const [rDia, rCanais] = await Promise.all([
+    fetch(base + "/dia/" + dataStr),
+    fetch(base + "/dia/" + dataStr + "/canais"),
+  ]);
+  if (!rDia.ok) throw new Error("API /dia respondeu HTTP " + rDia.status);
+
+  const dadosDia = await rDia.json();
+  const dadosCanais = rCanais.ok ? await rCanais.json() : { canais: [] };
+
+  const leituras = dadosDia.leituras || [];
+  if (leituras.length === 0) return null;
+
+  // Indexa os canais por (inversor + horario) para montar mppt/strings
+  // chave: "Inversor X||HH:MM" -> { mppt:[], strings:[] }
+  const canalMap = {};
+  for (const c of (dadosCanais.canais || [])) {
+    const hhmm = (c.data_hora || "").slice(11, 16);
+    const chave = c.inversor + "||" + hhmm;
+    if (!canalMap[chave]) canalMap[chave] = { mppt: [], pv: [] };
+    if (c.tipo === "MPPT") {
+      canalMap[chave].mppt[c.canal - 1] = { v: c.tensao_v || 0, i: c.corrente_a || 0 };
+    } else {
+      canalMap[chave].pv[c.canal - 1] = { i: c.corrente_a || 0, p: c.potencia_w || 0 };
+    }
+  }
+
+  // Estruturas que parseCSV produz
+  const grafico = {};        // HH:MM -> soma Pac
+  const ultimas = {};        // nome -> ultima leitura
+  const enrgSlot = {};       // HH:MM -> soma DYield
+  const pacPorTs = {};       // HH:MM -> soma Pac (pico)
+  let temDadosData = false;
+
+  // disponibilidade
+  const HORA_INI = 6, HORA_FIM = 18;
+  const dispGerando = {}, dispUltimaMin = {}, pacAcum = {}, pacAcumCnt = {};
+
+  for (const l of leituras) {
+    const nome = l.inversor;
+    const dh = l.data_hora;          // "AAAA-MM-DD HH:MM"
+    const hhmm = dh.slice(11, 16);
+    const pac = l.pac_kw || 0;
+    const dy = l.dyield_kwh || 0;
+    if (!nome) continue;
+    temDadosData = true;
+
+    // grafico de potencia e energia
+    grafico[hhmm] = (grafico[hhmm] || 0) + pac;
+    enrgSlot[hhmm] = (enrgSlot[hhmm] || 0) + dy;
+    pacPorTs[hhmm] = (pacPorTs[hhmm] || 0) + pac;
+
+    // ultima leitura de cada inversor (a lista vem ordenada por tempo)
+    const chave = nome + "||" + hhmm;
+    const canais = canalMap[chave] || { mppt: [], pv: [] };
+    const mppt = [];
+    for (let m = 0; m < NUM_MPPT; m++) {
+      mppt.push(canais.mppt[m] || { v: 0, i: 0 });
+    }
+    const strings = [];
+    for (let s = 0; s < NUM_STR; s++) {
+      const mppt_n = Math.floor(s / 2);
+      const pv = canais.pv[s] || { i: 0, p: 0 };
+      strings.push({
+        n: s + 1, i: pv.i, p: pv.p,
+        v: mppt[mppt_n] ? mppt[mppt_n].v : 0,
+        mppt: mppt_n + 1,
+      });
+    }
+    ultimas[nome] = {
+      dataHora: dh, sn: "", status: l.status || "",
+      pac_kw: pac, dy_kwh: dy, ty_kwh: l.tyield_kwh || 0,
+      freq: l.freq_hz || 0, tmod: l.tmod_c || 0, tamb: l.tamb_c || 0,
+      iso: l.iso_kohm || 0, pdc_kw: l.pdc_kw || 0,
+      mppt, strings,
+    };
+
+    // disponibilidade na janela 06-18h
+    const hora = parseInt(hhmm.slice(0, 2));
+    const min = parseInt(hhmm.slice(3, 5));
+    if (hora >= HORA_INI && hora < HORA_FIM) {
+      const minAbs = hora * 60 + min;
+      if (dispUltimaMin[nome] === undefined || minAbs > dispUltimaMin[nome])
+        dispUltimaMin[nome] = minAbs;
+      if (pac > 0) {
+        dispGerando[nome] = (dispGerando[nome] || 0) + 1;
+        pacAcum[nome] = (pacAcum[nome] || 0) + pac;
+        pacAcumCnt[nome] = (pacAcumCnt[nome] || 0) + 1;
+      }
+    }
+  }
+
+  // energia por intervalo de 15 min (mesma logica do parseCSV)
+  const INTERVALO_MIN = 15;
+  const acumPac = {}, acumCnt = {};
+  for (const hhmm of Object.keys(grafico)) {
+    const [hh, mm] = hhmm.split(":").map(Number);
+    const jan = Math.floor(mm / INTERVALO_MIN) * INTERVALO_MIN;
+    const chave = String(hh).padStart(2, "0") + ":" + String(jan).padStart(2, "0");
+    acumPac[chave] = (acumPac[chave] || 0) + grafico[hhmm];
+    acumCnt[chave] = (acumCnt[chave] || 0) + 1;
+  }
+  const enrgIntervalo = {};
+  for (const chave of Object.keys(acumPac)) {
+    enrgIntervalo[chave] = (acumPac[chave] / acumCnt[chave]) * INTERVALO_MIN / 60;
+  }
+
+  // performance media e pico
+  const pacMediaPorInv = {};
+  for (const nome of Object.keys(pacAcum)) {
+    pacMediaPorInv[nome] = pacAcumCnt[nome] > 0 ? pacAcum[nome] / pacAcumCnt[nome] : 0;
+  }
+  let pacPicoTotal = 0, pacPicoHora = "";
+  for (const ts of Object.keys(pacPorTs)) {
+    if (pacPorTs[ts] > pacPicoTotal) { pacPicoTotal = pacPorTs[ts]; pacPicoHora = ts; }
+  }
+  const dispSlotsPossiveis = {};
+  for (const nome of Object.keys(dispUltimaMin)) {
+    const fimMin = Math.min(dispUltimaMin[nome], HORA_FIM * 60 - 5);
+    dispSlotsPossiveis[nome] = Math.max(Math.floor((fimMin - HORA_INI * 60) / 5) + 1, 1);
+  }
+
+  return {
+    grafico, ultimas, enrg: enrgSlot, enrgIntervalo,
+    dispGerando, dispSlotsPossiveis, pacMediaPorInv,
+    pacPicoTotal, pacPicoHora, temDadosData,
+    alarmes: [],   // alarmes nao migrados nesta fase
+  };
+}
+
 function parseCSV(texto) {
   const linhas = texto.trim().split("\n")
     .map(l => l.split(";").map(c => c.trim().replace(/^"|"$/g,"")));
@@ -2132,11 +2275,6 @@ function parseCSV(texto) {
   // Para pico AC total do dia: soma instantânea por timestamp
   const pacPorTs = {};     // timestamp HH:MM → soma de Pac dos 8 inversores
 
-  // Mini-grafico do card: serie de Pac por inversor ao longo do dia.
-  // Estrutura: { "Inversor 1": [{x: "06:00", y: 12.3}, ...], ... }
-  // Slots agregados por (HH:MM) e ordenados cronologicamente no fim.
-  const pacPorInv = {};
-
   for (let i = 2; i < linhas.length; i++) {
     const l  = linhas[i];
     const dh = l[iData] ?? "";
@@ -2153,11 +2291,6 @@ function parseCSV(texto) {
     // Pico AC total do dia (qualquer hora, não só 06-18h)
     const tsKey = mHora[1] + ":" + mHora[2];
     pacPorTs[tsKey] = (pacPorTs[tsKey] ?? 0) + pac;
-
-    // Serie do inversor (para mini-grafico do card expandido).
-    // Acumula o Pac por timestamp (caso haja duplicatas no slot, soma).
-    if (!pacPorInv[nome]) pacPorInv[nome] = {};
-    pacPorInv[nome][tsKey] = (pacPorInv[nome][tsKey] ?? 0) + pac;
 
     // Só conta slots dentro da janela 06:00–18:00
     const dentroJanela = (hora > HORA_INI || (hora === HORA_INI && min >= 0)) &&
@@ -2267,18 +2400,9 @@ function parseCSV(texto) {
     });
   }
 
-  // Converte pacPorInv: { "Inv1": {"06:00": 12.3, ...} } → { "Inv1": [{x,y}, ...] }
-  // ordenado cronologicamente. Usado pelo mini-grafico do card expandido.
-  const pacPorInvSerie = {};
-  for (const nome of Object.keys(pacPorInv)) {
-    const slots = Object.keys(pacPorInv[nome]).sort();   // "HH:MM" classifica certo
-    pacPorInvSerie[nome] = slots.map(s => ({ x: s, y: pacPorInv[nome][s] }));
-  }
-
   return { grafico, enrg, enrgIntervalo, ultimas, temDadosData,
            dispGerando, dispSlotsPossiveis,
            pacMediaPorInv, pacPicoTotal, pacPicoHora,
-           pacPorInvSerie,
            alarmes };
 }
 
@@ -2615,15 +2739,6 @@ function atualizarGrafico(grafico, enrg, enrgIntervalo, temDados) {
 
 // ── Cards ─────────────────────────────────────────────────────────────────────
 function buildCards() {
-  // Destroi mini-charts existentes ANTES de substituir o innerHTML, senao
-  // o Chart.js fica com referencia a canvas que nao existe mais (memory leak).
-  try {
-    for (const k of Object.keys(miniCharts)) {
-      try { miniCharts[k].destroy(); } catch(e) {}
-      delete miniCharts[k];
-    }
-  } catch(e) {}
-
   $("inv-grid").innerHTML = NOMES.map((nome, idx) => `
     <div class="inv-card" id="card-${idx}">
       <div class="inv-header" onclick="toggleCard(${idx})">
@@ -2761,127 +2876,7 @@ function renderCard(idx, d, dispGerando, dispPossiveis, pacMedia06_18, ehHistori
       <span>${strAtivas}/${NUM_STR} strings ativas</span>
       <span>${d.dataHora}</span>
     </div>
-    <div class="mini-chart-wrap" id="mini-wrap-${idx}">
-      <div class="mini-chart-title">Potência instantânea — ${d.nome ?? NOMES[idx]}</div>
-      <div class="mini-chart-box"><canvas id="mini-chart-${idx}"></canvas></div>
-    </div>
     <div class="mppt-grid">${mpptHtml}</div>`;
-
-  // Renderiza/atualiza o mini-grafico apos o canvas existir no DOM.
-  // E feito SEMPRE que renderCard roda; se o card estiver colapsado,
-  // o canvas existe mas nao tem layout — Chart.js aceita normalmente
-  // e recalcula tamanho quando o body for exibido.
-  try { renderMiniChartInversor(idx, NOMES[idx]); } catch(e) { console.warn("mini-chart:", e); }
-}
-
-// ============================================================================
-// MINI-GRAFICO DE POT. INSTANTANEA POR INVERSOR (dentro do card expandido)
-// ============================================================================
-// Cria/atualiza um Chart.js para o card de indice `idx`. Le a serie temporal
-// de pacPorInvHoje[nome] (populada pelo parseCSV apos cada atualizacao).
-// - Cor: laranja (#FF9B22), mesma da linha principal "Hoje"
-// - Eixo X: HH:MM (cronologico, conforme dados disponiveis)
-// - Eixo Y: auto, kW
-// - Sem legenda (uma serie so), com tooltip ao hover
-// - Altura fixa via CSS (~160px de plot + titulo)
-//
-// Estrategia para evitar leaks: se ja existe chart em miniCharts[idx], faz
-// .update() em vez de destroy/recriar. Quando o canvas e re-renderizado pelo
-// innerHTML do body (cada atualizar()), a referencia DOM antiga vira lixo —
-// nessa situacao precisamos destruir e recriar.
-function renderMiniChartInversor(idx, nome) {
-  const canvas = document.getElementById("mini-chart-" + idx);
-  if (!canvas) return;
-  if (typeof Chart === "undefined") {
-    console.warn("Chart.js nao carregado — pulando mini-grafico");
-    return;
-  }
-
-  const serie = pacPorInvHoje[nome] || [];
-  const labels = serie.map(p => p.x);
-  const valores = serie.map(p => p.y);
-
-  // Se o chart existente foi associado a um canvas anterior (innerHTML
-  // recriou o DOM), o canvas atual nao tem dono — destroi e recria.
-  const existente = miniCharts[idx];
-  if (existente && existente.canvas !== canvas) {
-    try { existente.destroy(); } catch(e) {}
-    delete miniCharts[idx];
-  }
-
-  if (miniCharts[idx]) {
-    // Apenas atualiza dados (mais leve que recriar)
-    const c = miniCharts[idx];
-    c.data.labels = labels;
-    c.data.datasets[0].data = valores;
-    c.update("none");
-    return;
-  }
-
-  // Cria novo Chart.js
-  miniCharts[idx] = new Chart(canvas, {
-    type: "line",
-    data: {
-      labels: labels,
-      datasets: [{
-        label: nome,
-        data: valores,
-        borderColor: "#FF9B22",
-        backgroundColor: "rgba(255, 155, 34, 0.15)",
-        fill: true,
-        tension: 0.25,
-        pointRadius: 0,
-        pointHoverRadius: 4,
-        pointHoverBackgroundColor: "#FF9B22",
-        pointHoverBorderColor: "#fff",
-        pointHoverBorderWidth: 2,
-        borderWidth: 2,
-      }],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      animation: { duration: 300 },
-      interaction: { mode: "index", intersect: false },
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          backgroundColor: "rgba(20,20,20,0.92)",
-          titleColor: "#fff",
-          bodyColor: "#fff",
-          borderColor: "#FF9B22",
-          borderWidth: 1,
-          padding: 8,
-          displayColors: false,
-          callbacks: {
-            title: (items) => items.length ? items[0].label : "",
-            label: (item)  => " " + (+item.parsed.y).toFixed(2) + " kW",
-          },
-        },
-      },
-      scales: {
-        x: {
-          ticks: {
-            color: "#888",
-            font: { size: 10 },
-            maxTicksLimit: 8,
-            maxRotation: 0,
-            autoSkip: true,
-          },
-          grid: { display: false },
-        },
-        y: {
-          beginAtZero: true,
-          ticks: {
-            color: "#888",
-            font: { size: 10 },
-            callback: (v) => v + " kW",
-          },
-          grid: { color: "rgba(150,150,150,0.15)" },
-        },
-      },
-    },
-  });
 }
 
 // ── Atualização ───────────────────────────────────────────────────────────────
@@ -2899,42 +2894,15 @@ async function atualizarDiario() {
   } catch (e) { /* ignora */ }
 
   try {
-    const nomeArq = csvUrlParaData(dataSelecionada);
-    // Tenta primeiro LOGTESTE (dados ao vivo), depois Banco de Dados (histórico)
-    const candidatos = [
-      CSV_DIR_BD   + "/" + nomeArq,  // proxy agora salva aqui
-      CSV_DIR_LIVE + "/" + nomeArq,  // fallback legado
-    ];
-
-    let texto = null;
-    let fonteUsada = "";
-    for (const url of candidatos) {
-      for (let tentativa = 1; tentativa <= 3; tentativa++) {
-        try {
-          const r = await fetch(url + "?t=" + Date.now());
-          if (r.status === 404) break; // tenta próxima fonte
-          if (!r.ok) throw new Error("HTTP " + r.status);
-          texto      = await r.text();
-          fonteUsada = url;
-          break;
-        } catch(eFetch) {
-          if (tentativa === 3) break;
-          await new Promise(res => setTimeout(res, 2000));
-        }
-      }
-      if (texto) break;
+    // V70: busca os dados do dia pela API (em vez do CSV)
+    let dados = null;
+    try {
+      dados = await buscarDiaAPI(dataSelecionada);
+    } catch (eApi) {
+      throw new Error("Falha ao consultar a API: " + eApi.message);
     }
-
-    if (!texto) throw new Error("CSV não encontrado para " + dataSelecionada);
-    console.log("CSV carregado de:", fonteUsada);
-    const dados = parseCSV(texto);
-    if (!dados) throw new Error("CSV sem dados para " + dataSelecionada);
-
-    // Disponibiliza serie de Pac por inversor para o mini-grafico nos cards.
-    // E reescrita a cada atualizacao do CSV (a cada ciclo do countdown ou
-    // mudanca de dia/usina). Os mini-charts existentes sao atualizados em
-    // _atualizarMiniCharts() abaixo, sem destruir/recriar (mais leve).
-    pacPorInvHoje = dados.pacPorInvSerie || {};
+    if (!dados) throw new Error("Sem dados para " + dataSelecionada);
+    console.log("Dados carregados da API para", dataSelecionada);
 
     atualizarGrafico(dados.grafico, dados.enrg, dados.enrgIntervalo, dados.temDadosData);
 
@@ -2985,8 +2953,17 @@ async function atualizarDiario() {
 
     // ── Comparação com dia anterior ─────────────────────────────────────────
     const dataOntem = dataAnteriorStr(dataSelecionada);
-    const textoOntem = await fetchCSVPorData(dataOntem);
-    const compOntem  = parseCSVParaComparacao(textoOntem, dataOntem);
+    // V70: monta a comparacao a partir da API
+    let compOntem = null;
+    try {
+      const dadosOntem = await buscarDiaAPI(dataOntem);
+      if (dadosOntem) {
+        compOntem = {
+          pacPorSlot: dadosOntem.grafico,
+          energiaTotalDia: Math.max(0, ...Object.values(dadosOntem.enrg)),
+        };
+      }
+    } catch (e) { compOntem = null; }
 
     if (ehHistorico) {
       // Em modo histórico, o KPI s-pac mostra pico do dia → sub = horário do pico
@@ -3965,16 +3942,6 @@ function trocarUsina(slug) {
   try {
     if (typeof chartTotal   !== 'undefined' && chartTotal)   { chartTotal.destroy();   chartTotal   = null; }
     if (typeof chartEnergia !== 'undefined' && chartEnergia) { chartEnergia.destroy(); chartEnergia = null; }
-  } catch(e) {}
-
-  // Destroi mini-charts dos cards da usina anterior (evita memory leak;
-  // a quantidade de inversores pode ate mudar entre usinas)
-  try {
-    for (const k of Object.keys(miniCharts)) {
-      try { miniCharts[k].destroy(); } catch(e) {}
-      delete miniCharts[k];
-    }
-    pacPorInvHoje = {};
   } catch(e) {}
 
   // ── 11. Recarrega plant-info pra usina nova (V64) ───────────────────
