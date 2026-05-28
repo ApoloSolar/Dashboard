@@ -8,7 +8,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <style>
     /* ═══════════════════════════════════════════════════════════════════
-       APOLO SOLAR — DASHBOARD V71
+       APOLO SOLAR — DASHBOARD V61
        Executive BI redesign. Preserves every ID and class hook used by
        the original JS — only the visual layer changed.
        Type: IBM Plex Sans (UI) + IBM Plex Mono (numeric/labels)
@@ -1393,12 +1393,12 @@
   <div class="date-bar">
     <div class="modo-toggle" role="group" aria-label="Modo de visualização">
       <button type="button" class="mt-btn ativo" data-modo="diario" onclick="trocarModo('diario')">Diário</button>
-      <button type="button" class="mt-btn"       data-modo="mensal" onclick="trocarModo('mensal')" title="Desativado nesta versão de teste" style="opacity:.45">Mensal</button>
-      <button type="button" class="mt-btn"       data-modo="anual"  onclick="trocarModo('anual')" title="Desativado nesta versão de teste" style="opacity:.45">Anual</button>
+      <button type="button" class="mt-btn"       data-modo="mensal" onclick="trocarModo('mensal')">Mensal</button>
+      <button type="button" class="mt-btn"       data-modo="anual"  onclick="trocarModo('anual')">Anual</button>
     </div>
     <label style="margin-left:12px;font-size:.8rem;opacity:.8">API:</label>
     <input type="text" class="date-input" id="api-url-input"
-           value="https://backend-api-production-a7c9.up.railway.app"
+           value="https://backend-api-production-e062.up.railway.app"
            style="min-width:340px" title="Endereço da API (configurável)">
     <label id="lbl-data" style="margin-left:8px">Visualizar data:</label>
     <input type="date"   class="date-input" id="date-picker"  max="2099-12-31">
@@ -1503,7 +1503,7 @@
 //  A URL da API e configuravel pelo campo no topo da tela; o
 //  valor abaixo e apenas o padrao.
 // ============================================================
-let API_URL = "https://backend-api-production-a7c9.up.railway.app";
+let API_URL = "https://backend-api-production-e062.up.railway.app";
 
 // Le a URL da API do campo configuravel (se existir).
 function getApiUrl() {
@@ -1927,15 +1927,6 @@ let anoSelecionado   = parseInt(hojeStr().slice(0, 4)); // 2026
 function trocarModo(novo) {
   if (!["diario", "mensal", "anual"].includes(novo)) return;
   if (novo === modoVisao) return;
-
-  // V71: modos mensal e anual desativados nesta fase de teste.
-  // Serao reativados quando a API tiver os endpoints de resumo.
-  if (novo === "mensal" || novo === "anual") {
-    alert("Os modos Mensal e Anual estao desativados nesta versao de "
-        + "teste (V71). Apenas o modo Diario consome a API. Os outros "
-        + "modos serao reativados na proxima fase.");
-    return;
-  }
 
   modoVisao = novo;
 
@@ -3728,6 +3719,60 @@ function _ocultarHeatmap() {
   if (card) card.style.display = "none";
 }
 
+// ============================================================
+//  V71 - BUSCA MENSAL VIA API v2
+// ------------------------------------------------------------
+//  Chama /mensal/{aaaa-mm} e monta o MESMO array 'linhas' que
+//  parseResumoMes() produzia, para que atualizarMensal() e
+//  atualizarAnual() funcionem sem alteracao.
+//  Cada item de 'linhas':
+//    {data, energia_kwh, pac_medio, pico_pac, hora_pico,
+//     insolacao_h, status, disp_por_inv:{nome:pct}}
+//  Tambem guarda por_inversor cru no cache _mensalPorInv[mes]
+//  para o "grafico em 8".
+// ============================================================
+let _mensalPorInvCache = {};   // "aaaa-mm" -> por_inversor da API
+
+async function buscarMensalAPIComoLinhas(ano, mes) {
+  const base = getApiUrl();
+  const mm = String(mes).padStart(2, "0");
+  const chave = ano + "-" + mm;
+  let dados;
+  try {
+    const r = await fetch(base + "/mensal/" + chave);
+    if (!r.ok) return null;
+    dados = await r.json();
+  } catch (e) { return null; }
+
+  if (!dados || !dados.dias || dados.dias.length === 0) return null;
+
+  // Guarda por_inversor para o grafico em 8
+  _mensalPorInvCache[chave] = dados.por_inversor || [];
+
+  // Monta disp_por_inv por data: { "2026-05-01": {"Inversor 1": 90, ...}, ... }
+  const dispPorData = {};
+  for (const inv of (dados.por_inversor || [])) {
+    for (const d of (inv.dias || [])) {
+      if (!dispPorData[d.data]) dispPorData[d.data] = {};
+      dispPorData[d.data][inv.nome] = d.disponibilidade != null ? d.disponibilidade : 0;
+    }
+  }
+
+  // Monta o array linhas no formato do parseResumoMes
+  const linhas = dados.dias.map(d => ({
+    data:        d.data,
+    energia_kwh: d.energia_kwh || 0,
+    pac_medio:   d.pac_medio_kw || 0,
+    pico_pac:    d.pico_kw || 0,
+    hora_pico:   d.pico_hora || "",
+    insolacao_h: d.insolacao_h != null ? d.insolacao_h : null,
+    status:      (d.energia_kwh || 0) > 0 ? "OK" : "SEM_DADOS",
+    disp_por_inv: dispPorData[d.data] || null,
+  }));
+
+  return linhas;
+}
+
 async function atualizarMensal() {
   const dotG = $("dot-g"), stG = $("status-g");
   dotG.className = "dot-g";
@@ -3735,9 +3780,7 @@ async function atualizarMensal() {
 
   try {
     const [ano, mes] = mesSelecionado.split("-").map(Number);
-    const url = resumoUrl(ano, mes);
-    const texto = await fetchTexto(url);
-    const linhas = parseResumoMes(texto);
+    const linhas = await buscarMensalAPIComoLinhas(ano, mes);
 
     if (!linhas) {
       throw new Error("resumo do mês " + mesSelecionado + " não encontrado");
@@ -3780,8 +3823,7 @@ async function atualizarMensal() {
     // Busca resumo do mês anterior em paralelo
     let mesAntAno = ano, mesAntMes = mes - 1;
     if (mesAntMes === 0) { mesAntMes = 12; mesAntAno = ano - 1; }
-    const txtAnt = await fetchTexto(resumoUrl(mesAntAno, mesAntMes));
-    const linhasAnt = parseResumoMes(txtAnt);
+    const linhasAnt = await buscarMensalAPIComoLinhas(mesAntAno, mesAntMes);
     let energiaAnt = null, picoAnt = null;
     if (linhasAnt) {
       energiaAnt = 0;
@@ -3893,10 +3935,12 @@ async function atualizarAnual() {
     const hojeMes = parseInt(hoje.slice(5, 7));
     const mesLimite = (ano === hojeAno) ? hojeMes : 12;
 
-    // Busca todos os resumos em paralelo
+    // Busca todos os resumos mensais em paralelo (via API)
     const promessas = [];
     for (let m = 1; m <= mesLimite; m++) {
-      promessas.push(fetchTexto(resumoUrl(ano, m)).then(t => ({ mes: m, linhas: parseResumoMes(t) })));
+      promessas.push(
+        buscarMensalAPIComoLinhas(ano, m).then(linhas => ({ mes: m, linhas: linhas }))
+      );
     }
     const todos = await Promise.all(promessas);
 
