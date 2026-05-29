@@ -2749,25 +2749,54 @@ function initChart() {
     plugins: [{
       id: "crosshair",
       afterDraw(chart) {
-        if (!chart._crosshairX) return;
+        if (chart._crosshairX === null || chart._crosshairX === undefined) return;
         const { ctx, chartArea: { top, bottom } } = chart;
         ctx.save();
         ctx.beginPath();
         ctx.moveTo(chart._crosshairX, top);
         ctx.lineTo(chart._crosshairX, bottom);
-        ctx.strokeStyle = "rgba(255,155,34,0.5)";
+        ctx.strokeStyle = "rgba(255,155,34,0.6)";
         ctx.lineWidth = 1;
         ctx.setLineDash([4, 4]);
         ctx.stroke();
         ctx.restore();
+        // Marca os pontos ativos (snap) com um circulo em cada serie
+        if (chart._crosshairIdx !== null && chart._crosshairIdx !== undefined) {
+          chart.data.datasets.forEach((ds, di) => {
+            const val = ds.data[chart._crosshairIdx];
+            if (val === null || val === undefined) return;
+            const x = chart.scales.x.getPixelForValue(chart._crosshairIdx);
+            const y = chart.scales.y.getPixelForValue(val);
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(x, y, 4, 0, Math.PI * 2);
+            ctx.fillStyle = ds.borderColor || "#FF9B22";
+            ctx.fill();
+            ctx.strokeStyle = "#fff";
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+            ctx.restore();
+          });
+        }
       },
       beforeEvent(chart, args) {
         const evt = args.event;
         if (evt.type === "mousemove") {
-          chart._crosshairX = evt.x;
+          // SNAP: acha o indice de dado cujo X em pixels esta mais proximo do mouse
+          const xScale = chart.scales.x;
+          const labels = chart.data.labels || [];
+          if (!labels.length) { chart._crosshairX = null; return; }
+          // converte o pixel do mouse para o valor/indice do eixo e arredonda
+          let idx = Math.round(xScale.getValueForPixel(evt.x));
+          if (idx < 0) idx = 0;
+          if (idx > labels.length - 1) idx = labels.length - 1;
+          // so trava em pontos que tem dado em alguma serie
+          chart._crosshairIdx = idx;
+          chart._crosshairX = xScale.getPixelForValue(idx);
           chart.draw();
         } else if (evt.type === "mouseout") {
           chart._crosshairX = null;
+          chart._crosshairIdx = null;
           chart.draw();
         }
       }
@@ -2942,7 +2971,16 @@ function restaurarGraficoTotal() {
   const legT = $("chart-legend-total"), legI = $("chart-legend-inv");
   if (legT) legT.style.display = "flex";
   if (legI) legI.style.display = "none";
-  // Re-renderiza o modo atual (cada um sabe desenhar seu total)
+
+  // Limpa IMEDIATAMENTE os 8 datasets, deixando so o total (sincrono).
+  // Isso garante que as curvas por inversor somem na hora, mesmo que a
+  // funcao de atualizar o modo seja assincrona (await da API).
+  if (chartTotal && chartTotal.data && chartTotal.data.datasets.length > 1) {
+    chartTotal.data.datasets = [chartTotal.data.datasets[0]];
+    chartTotal.update("none");
+  }
+
+  // Re-renderiza o modo atual (cada um redesenha seu total corretamente)
   if (modoVisao === "diario")      atualizarDiario();
   else if (modoVisao === "mensal") atualizarMensal();
   else if (modoVisao === "anual")  atualizarAnual();
