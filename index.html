@@ -2905,6 +2905,17 @@ function atualizarGrafico(grafico, enrg, enrgIntervalo, temDados) {
   const valoresPac = pacHistory.filter(v => v !== null);
   const maxPac = valoresPac.length ? Math.max(...valoresPac) : 1;
   chartTotal.options.scales.y.max = Math.ceil(maxPac / 100) * 100;
+
+  // V72: restaura a config do eixo X para o padrao DIARIO. O modo
+  // mensal/anual (atualizarGraficosAgregados) muda type/ticks/callback do
+  // eixo X; sem resetar aqui, ao voltar ao diario a curva fica ilegivel.
+  chartTotal.options.scales.x.type = "category";
+  chartTotal.options.scales.x.ticks.callback = undefined;
+  chartTotal.options.scales.x.ticks.autoSkip = true;
+  chartTotal.options.scales.x.ticks.maxTicksLimit = 12;
+  chartTotal.options.scales.x.ticks.maxRotation = 0;
+  if (chartTotal.options.scales.y.title) chartTotal.options.scales.y.title.display = false;
+
   chartTotal.data.labels = LABELS_DIA;
   // V72: garante um UNICO dataset (o total laranja). Se o grafico em 8
   // tinha deixado 8 datasets, eles sao removidos aqui ao restaurar o total.
