@@ -8,7 +8,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <style>
     /* ═══════════════════════════════════════════════════════════════════
-       APOLO SOLAR — DASHBOARD V72
+       APOLO SOLAR — DASHBOARD V61
        Executive BI redesign. Preserves every ID and class hook used by
        the original JS — only the visual layer changed.
        Type: IBM Plex Sans (UI) + IBM Plex Mono (numeric/labels)
@@ -2877,7 +2877,12 @@ function atualizarGrafico(grafico, enrg, enrgIntervalo, temDados) {
   const maxPac = valoresPac.length ? Math.max(...valoresPac) : 1;
   chartTotal.options.scales.y.max = Math.ceil(maxPac / 100) * 100;
   chartTotal.data.labels = LABELS_DIA;
-  chartTotal.data.datasets[0].data = pacHistory;
+  // V72: garante um UNICO dataset (o total laranja). Se o grafico em 8
+  // tinha deixado 8 datasets, eles sao removidos aqui ao restaurar o total.
+  chartTotal.data.datasets = [{
+    data: pacHistory, borderColor: "#FF9B22", borderWidth: 2, fill: true,
+    backgroundColor: "rgba(217,82,4,0.15)", tension: 0.4, pointRadius: 0,
+  }];
   chartTotal.update("none");
 
   // Total exibido no título do gráfico de energia: continua vindo do DYield acumulado
