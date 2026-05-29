@@ -1414,6 +1414,10 @@
       <div class="chart-card-title">
         <span>Potência</span>
         <span id="chart-pontos" style="font-weight:400;color:var(--teal)"></span>
+        <button id="btn-por-inversor" onclick="togglePorInversor()"
+                style="margin-left:auto;font-size:.72rem;padding:3px 10px;border-radius:6px;
+                       border:1px solid var(--teal);background:transparent;color:var(--teal);
+                       cursor:pointer;white-space:nowrap;">Por inversor</button>
       </div>
       <div class="chart-subtitle">Potência (kW) ao longo do dia</div>
       <div class="chart-meta" id="chart-meta">&nbsp;</div>
@@ -1422,10 +1426,12 @@
           <canvas id="chart-total"></canvas>
         </div>
       </div>
-      <div class="chart-legend">
+      <div class="chart-legend" id="chart-legend-total">
         <span class="chart-legend-dot" style="background:#FF9B22;height:2px;width:16px;"></span>
         <span>Potência Atual (kW)</span>
       </div>
+      <div class="chart-legend" id="chart-legend-inv"
+           style="display:none;flex-wrap:wrap;gap:8px 14px;"></div>
     </div>
     <!-- Gráfico Energia -->
     <div class="chart-card">
@@ -1764,6 +1770,32 @@ let chartTotal, chartEnergia, countdownVal = INTERVALO, countdownTimer;
 // antes da reconstrucao para evitar memory leaks do Chart.js.
 let pacPorInvHoje = {};
 const miniCharts  = {};
+
+// ============================================================
+//  V72 - GRAFICO "EM 8" (curvas por inversor sobrepostas)
+// ------------------------------------------------------------
+//  Estado do toggle e dados por inversor de cada modo.
+//  porInversorAtivo: false = curva unica (total), true = 8 curvas
+//  Os dados sao preenchidos por cada modo:
+//   - diario: _dadosPorInvDiario = pacPorInvSerie (do buscarDiaAPI)
+//   - mensal/anual: _dadosPorInvAgregado = lista da API (por_inversor)
+//  Eixo Y sempre em kW (no mensal/anual usa pac_medio_kw).
+// ============================================================
+let porInversorAtivo = false;
+let _dadosPorInvDiario = {};     // { "Inversor 1": [{x:"06:00",y:12.3}], ... }
+let _dadosPorInvAgregado = [];   // [{idx, nome, pontos:[{x,y}]}, ...]
+
+// Paleta de 8 cores distintas e legiveis
+const CORES_INV = [
+  "#FF9B22", // laranja
+  "#2E86DE", // azul
+  "#27AE60", // verde
+  "#E74C3C", // vermelho
+  "#9B59B6", // roxo
+  "#16A085", // teal
+  "#F39C12", // amarelo-ouro
+  "#E91E8C", // rosa
+];
 
 function $(id) { return document.getElementById(id); }
 function set(id, v) { const e=$(id); if(e) e.textContent=v; }
@@ -2873,6 +2905,120 @@ function atualizarGrafico(grafico, enrg, enrgIntervalo, temDados) {
     set("chart-pontos", "");
     atualizarBadgeData();
   }
+
+  // V72: guarda os dados por inversor do dia (vem de pacPorInvHoje, que o
+  // buscarDiaAPI preenche) e, se o modo "por inversor" estiver ativo,
+  // re-renderiza as 8 curvas.
+  _dadosPorInvDiario = pacPorInvHoje || {};
+  if (porInversorAtivo && modoVisao === "diario") {
+    renderizarGraficoPorInversor();
+  }
+}
+
+// ============================================================
+//  V72 - Toggle e renderizacao do grafico "em 8"
+// ============================================================
+function togglePorInversor() {
+  porInversorAtivo = !porInversorAtivo;
+  const btn = $("btn-por-inversor");
+  if (btn) {
+    btn.style.background = porInversorAtivo ? "var(--teal)" : "transparent";
+    btn.style.color      = porInversorAtivo ? "#fff" : "var(--teal)";
+  }
+  if (porInversorAtivo) {
+    renderizarGraficoPorInversor();
+  } else {
+    restaurarGraficoTotal();
+  }
+}
+
+// Volta ao grafico de curva unica (total da usina)
+function restaurarGraficoTotal() {
+  const legT = $("chart-legend-total"), legI = $("chart-legend-inv");
+  if (legT) legT.style.display = "flex";
+  if (legI) legI.style.display = "none";
+  // Re-renderiza o modo atual (cada um sabe desenhar seu total)
+  if (modoVisao === "diario")      atualizarDiario();
+  else if (modoVisao === "mensal") atualizarMensal();
+  else if (modoVisao === "anual")  atualizarAnual();
+}
+
+// Monta os 8 datasets e desenha. Usa a fonte certa conforme o modo:
+//  - diario: _dadosPorInvDiario (series de Pac ao longo do dia)
+//  - mensal/anual: _dadosPorInvAgregado (pac_medio_kw por dia/mes)
+function renderizarGraficoPorInversor() {
+  let labels = [];
+  let datasets = [];
+
+  if (modoVisao === "diario") {
+    labels = LABELS_DIA;
+    const nomes = Object.keys(_dadosPorInvDiario).sort();
+    nomes.forEach((nome, i) => {
+      const serie = _dadosPorInvDiario[nome] || [];
+      // mapeia {x:"HH:MM", y} para o array alinhado a LABELS_DIA
+      const arr = new Array(LABELS_DIA.length).fill(null);
+      for (const p of serie) {
+        const idx = LABELS_DIA.indexOf(p.x);
+        if (idx !== -1) arr[idx] = parseFloat((p.y || 0).toFixed(2));
+      }
+      datasets.push(_dsInv(nome, arr, i));
+    });
+  } else {
+    // mensal ou anual: _dadosPorInvAgregado = [{idx,nome,pontos:[{x,y}]}]
+    if (!_dadosPorInvAgregado.length) return;
+    // labels = uniao ordenada dos x de todos (dias do mes ou meses do ano)
+    const setX = new Set();
+    _dadosPorInvAgregado.forEach(inv =>
+      (inv.pontos || []).forEach(p => setX.add(p.x)));
+    if (modoVisao === "anual") {
+      // ordena por mes cronologico, nao alfabetico
+      const ORDEM_MES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+      labels = Array.from(setX).sort((a,b) => ORDEM_MES.indexOf(a) - ORDEM_MES.indexOf(b));
+    } else {
+      labels = Array.from(setX).sort();
+    }
+    _dadosPorInvAgregado.forEach((inv, i) => {
+      const mapa = {};
+      (inv.pontos || []).forEach(p => { mapa[p.x] = p.y; });
+      const arr = labels.map(x => mapa[x] != null ? parseFloat(mapa[x].toFixed(2)) : null);
+      datasets.push(_dsInv(inv.nome, arr, i));
+    });
+  }
+
+  // Escala Y (kW) dinamica
+  let maxV = 0;
+  datasets.forEach(d => d.data.forEach(v => { if (v != null && v > maxV) maxV = v; }));
+  chartTotal.options.scales.y.max = Math.ceil((maxV || 1) / 10) * 10;
+  chartTotal.data.labels = labels;
+  chartTotal.data.datasets = datasets;
+  chartTotal.update("none");
+
+  // Legenda: troca para a dos inversores
+  const legT = $("chart-legend-total"), legI = $("chart-legend-inv");
+  if (legT) legT.style.display = "none";
+  if (legI) {
+    legI.style.display = "flex";
+    legI.innerHTML = datasets.map(d =>
+      `<span style="display:inline-flex;align-items:center;gap:5px;">
+         <span style="background:${d.borderColor};height:3px;width:14px;display:inline-block;border-radius:2px;"></span>
+         <span style="font-size:.72rem;">${d.label}</span>
+       </span>`).join("");
+  }
+}
+
+// Helper: cria um dataset de inversor com a cor i
+function _dsInv(nome, data, i) {
+  return {
+    label: nome,
+    data: data,
+    borderColor: CORES_INV[i % CORES_INV.length],
+    backgroundColor: "transparent",
+    borderWidth: 2,
+    fill: false,
+    tension: 0.4,
+    pointRadius: 0,
+    spanGaps: true,
+  };
 }
 
 // ── Cards ─────────────────────────────────────────────────────────────────────
@@ -3883,6 +4029,19 @@ async function atualizarMensal() {
       if (wrap) wrap.innerHTML = '<div class="heatmap-loading">erro ao renderizar heatmap: ' + err.message + '</div>';
     }
 
+    // V72: monta dados por inversor para o "grafico em 8" (mensal).
+    // Cada curva = pac_medio_kw de cada dia do mes.
+    const chaveMes = ano + "-" + String(mes).padStart(2, "0");
+    const porInvMes = _mensalPorInvCache[chaveMes] || [];
+    _dadosPorInvAgregado = porInvMes.map(inv => ({
+      idx: inv.idx, nome: inv.nome,
+      pontos: (inv.dias || []).map(d => ({
+        x: d.data.slice(8, 10),          // dia do mes "01".."31"
+        y: d.pac_medio_kw || 0,
+      })),
+    }));
+    if (porInversorAtivo) renderizarGraficoPorInversor();
+
     dotG.className  = "dot-g ok";
     stG.textContent = "mês " + mesSelecionado + " carregado";
     set("footer", "resumo do mês carregado: " + new Date().toLocaleTimeString("pt-BR"));
@@ -4022,6 +4181,33 @@ async function atualizarAnual() {
     _renderSparklineInsolacao(linhasAno);
 
     atualizarGraficosAgregados(linhasAno, "mes");
+
+    // V72: monta dados por inversor para o "grafico em 8" (anual).
+    // Cada curva = media mensal do pac_medio_kw de cada inversor.
+    // Usa o _mensalPorInvCache preenchido por buscarMensalAPIComoLinhas.
+    const NOMES_MES_G = ["", "Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+    const invAcc = {};   // nome -> { idx, nome, porMes: {mes: [valores]} }
+    for (let m = 1; m <= 12; m++) {
+      const chave = ano + "-" + String(m).padStart(2, "0");
+      const porInv = _mensalPorInvCache[chave] || [];
+      for (const inv of porInv) {
+        if (!invAcc[inv.nome]) invAcc[inv.nome] = { idx: inv.idx, nome: inv.nome, porMes: {} };
+        // media das medias diarias daquele mes
+        const vals = (inv.dias || []).map(d => d.pac_medio_kw || 0).filter(v => v > 0);
+        const med = vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : 0;
+        invAcc[inv.nome].porMes[m] = med;
+      }
+    }
+    _dadosPorInvAgregado = Object.values(invAcc)
+      .sort((a,b) => a.idx - b.idx)
+      .map(inv => ({
+        idx: inv.idx, nome: inv.nome,
+        pontos: Object.keys(inv.porMes).map(m => ({
+          x: NOMES_MES_G[parseInt(m)],
+          y: inv.porMes[m],
+        })),
+      }));
+    if (porInversorAtivo) renderizarGraficoPorInversor();
 
     dotG.className  = "dot-g ok";
     stG.textContent = "ano " + ano + " carregado";
