@@ -8,7 +8,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <style>
     /* ═══════════════════════════════════════════════════════════════════
-       APOLO SOLAR — DASHBOARD V71
+       APOLO SOLAR — DASHBOARD V61
        Executive BI redesign. Preserves every ID and class hook used by
        the original JS — only the visual layer changed.
        Type: IBM Plex Sans (UI) + IBM Plex Mono (numeric/labels)
@@ -271,16 +271,26 @@
     /* ──────────────────────────────────────────────────────────── LAYOUT ── */
     .main { max-width: 1400px; margin: 0 auto; padding: 24px 28px 12px; }
 
-    .countdown-bar-wrap {
-      height: 2px; background: var(--border-soft); border-radius: 2px;
-      margin-bottom: 24px; overflow: hidden;
+    /* ───────────────────────── INDICADOR DE ATUALIZACAO (V72) ── */
+    /* Substitui a antiga barra + contagem regressiva por um indicador
+       discreto e embutido na topbar: um ponto pulsante = "ao vivo". */
+    .auto-pill {
+      display: inline-flex; align-items: center; gap: 7px;
+      font-size: 12px; color: var(--text3);
+      white-space: nowrap; user-select: none;
     }
-    .countdown-bar {
-      height: 100%;
-      background: linear-gradient(90deg, var(--amber-2), var(--amber));
-      border-radius: 2px;
-      transition: width 1s linear;
-      box-shadow: 0 0 8px rgba(255,155,34,.4);
+    .auto-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--amber); flex-shrink: 0;
+      box-shadow: 0 0 0 0 rgba(255,155,34,.45);
+      animation: auto-pulse 2.4s ease-out infinite;
+    }
+    .auto-pill.off { color: var(--text4); }
+    .auto-pill.off .auto-dot { background: var(--text4); animation: none; box-shadow: none; }
+    @keyframes auto-pulse {
+      0%   { box-shadow: 0 0 0 0 rgba(255,155,34,.45); }
+      70%  { box-shadow: 0 0 0 6px rgba(255,155,34,0); }
+      100% { box-shadow: 0 0 0 0 rgba(255,155,34,0); }
     }
 
     /* ───────────────────────────────────────────────────── KPI / SUMMARY ── */
@@ -1235,7 +1245,10 @@
 <div class="topbar">
   <div class="logo"><span id="topbar-usina">Presidente Kennedy</span> &mdash; <span id="topbar-inversores">8</span> Inversores</div>
   <div class="top-right">
-    <span style="font-size:12px;color:var(--text3)">Próx. atualização: <span id="countdown">300</span>s</span>
+    <span class="auto-pill" id="auto-pill" title="Atualização automática a cada 4 minutos">
+      <span class="auto-dot"></span>
+      <span id="auto-status">ao vivo</span>
+    </span>
     <button class="btn" onclick="atualizar()">Atualizar agora</button>
 
     <!-- V60: Sistema de alarmes -->
@@ -1297,9 +1310,6 @@
 </div>
 
 <div class="main">
-  <div class="countdown-bar-wrap">
-    <div class="countdown-bar" id="countdown-bar" style="width:100%"></div>
-  </div>
 
   <!-- INFORMAÇÕES DA USINA — editável inline -->
   <section class="plant-info" id="plant-info" aria-label="Informações da usina">
@@ -1393,12 +1403,12 @@
   <div class="date-bar">
     <div class="modo-toggle" role="group" aria-label="Modo de visualização">
       <button type="button" class="mt-btn ativo" data-modo="diario" onclick="trocarModo('diario')">Diário</button>
-      <button type="button" class="mt-btn"       data-modo="mensal" onclick="trocarModo('mensal')">Mensal</button>
-      <button type="button" class="mt-btn"       data-modo="anual"  onclick="trocarModo('anual')">Anual</button>
+      <button type="button" class="mt-btn"       data-modo="mensal" onclick="trocarModo('mensal')" title="Desativado nesta versão de teste" style="opacity:.45">Mensal</button>
+      <button type="button" class="mt-btn"       data-modo="anual"  onclick="trocarModo('anual')" title="Desativado nesta versão de teste" style="opacity:.45">Anual</button>
     </div>
     <label style="margin-left:12px;font-size:.8rem;opacity:.8">API:</label>
     <input type="text" class="date-input" id="api-url-input"
-           value="https://backend-api-production-e062.up.railway.app"
+           value="https://backend-api-production-a7c9.up.railway.app"
            style="min-width:340px" title="Endereço da API (configurável)">
     <label id="lbl-data" style="margin-left:8px">Visualizar data:</label>
     <input type="date"   class="date-input" id="date-picker"  max="2099-12-31">
@@ -1503,7 +1513,7 @@
 //  A URL da API e configuravel pelo campo no topo da tela; o
 //  valor abaixo e apenas o padrao.
 // ============================================================
-let API_URL = "https://backend-api-production-e062.up.railway.app";
+let API_URL = "https://backend-api-production-a7c9.up.railway.app";
 
 // Le a URL da API do campo configuravel (se existir).
 function getApiUrl() {
@@ -1728,7 +1738,7 @@ function csvUrlParaData(dataStr) {
   const arquivo  = partes.join("_") + ".csv";
   return subpasta + "/" + arquivo;
 }
-const INTERVALO = 60;
+const INTERVALO = 240;   // V72: 4 minutos (a Chint publica a cada 5 min)
 const LARGURA_PT = 55;
 const NUM_MPPT  = 12;
 const NUM_STR   = 24;
@@ -1918,6 +1928,10 @@ function setDelta(elId, subId, hojeVal, ontemVal, dataOntem) {
 }
 
 let dataSelecionada = hojeStr();
+// V72: indica que o usuário está acompanhando o dia de hoje (modo "ao vivo").
+// Vira false quando ele escolhe uma data passada; volta a true em "Hoje",
+// ao selecionar a data de hoje ou ao trocar de usina.
+let seguindoHoje = true;
 
 // ===== MODO DE VISUALIZAÇÃO (Diário | Mensal | Anual) =====
 let modoVisao        = "diario";                     // "diario" | "mensal" | "anual"
@@ -1927,6 +1941,15 @@ let anoSelecionado   = parseInt(hojeStr().slice(0, 4)); // 2026
 function trocarModo(novo) {
   if (!["diario", "mensal", "anual"].includes(novo)) return;
   if (novo === modoVisao) return;
+
+  // V71: modos mensal e anual desativados nesta fase de teste.
+  // Serao reativados quando a API tiver os endpoints de resumo.
+  if (novo === "mensal" || novo === "anual") {
+    alert("Os modos Mensal e Anual estao desativados nesta versao de "
+        + "teste (V71). Apenas o modo Diario consome a API. Os outros "
+        + "modos serao reativados na proxima fase.");
+    return;
+  }
 
   modoVisao = novo;
 
@@ -2012,12 +2035,10 @@ function trocarModo(novo) {
     chartEnergia.update("none");
   }
 
-  // Pausa countdown em modos agregados (só recalcula quando trocar de mês/ano)
+  // Pausa atualização automática em modos agregados (só recalcula ao trocar mês/ano)
   if (novo !== "diario") {
     clearInterval(countdownTimer);
-    set("countdown", "—");
-    const bar = $("countdown-bar");
-    if (bar) bar.style.width = "0%";
+    setAutoLive(false);
   }
 
   atualizarBadgeData();
@@ -2026,6 +2047,7 @@ function trocarModo(novo) {
 
 function irParaHoje() {
   const hoje = hojeStr();
+  seguindoHoje = true;   // V72: voltou ao modo "ao vivo"
   // Independente do modo atual, "Hoje" sempre volta pro modo diário com a data de hoje
   if (modoVisao !== "diario") {
     // Atualiza o date-picker antes de chamar trocarModo, para que ao entrar
@@ -2086,7 +2108,7 @@ function atualizarBadgeData() {
 //  parseCSV() produz, para que todo o resto do codigo do modo
 //  diario funcione sem alteracao.
 //
-//  Enderecos consumidos (API v2):
+//  Enderecos consumidos (API v2), sempre com ?usina=<slug> (V72):
 //    /dia/{data}                  -> resumo + curva total da usina
 //    /dia/{data}/canais           -> ultima leitura de cada inversor
 //                                    (cabecalho + MPPTs + strings)
@@ -2096,11 +2118,16 @@ function atualizarBadgeData() {
 async function buscarDiaAPI(dataStr) {
   const base = getApiUrl();
 
+  // V72: informa a usina ativa a API (no backend o default e "pk").
+  // Sem este parametro, as 3 rotas respondem sempre com a usina padrao,
+  // e os graficos (total + por inversor) de Ibiracu acabam plotando PK.
+  const qUsina = "?usina=" + encodeURIComponent(USINA_ATIVA);
+
   // Busca os tres enderecos em paralelo
   const [rDia, rCanais, rCurvaInv] = await Promise.all([
-    fetch(base + "/dia/" + dataStr),
-    fetch(base + "/dia/" + dataStr + "/canais"),
-    fetch(base + "/dia/" + dataStr + "/curva-inversores"),
+    fetch(base + "/dia/" + dataStr + qUsina),
+    fetch(base + "/dia/" + dataStr + "/canais" + qUsina),
+    fetch(base + "/dia/" + dataStr + "/curva-inversores" + qUsina),
   ]);
   if (!rDia.ok) throw new Error("API /dia respondeu HTTP " + rDia.status);
 
@@ -3148,6 +3175,10 @@ function renderMiniChartInversor(idx, nome) {
 
 // ── Atualização ───────────────────────────────────────────────────────────────
 async function atualizarDiario() {
+  // V72: se virou a meia-noite e estamos acompanhando "hoje", avança o dia
+  // antes de buscar os dados — assim a tela nunca fica presa no dia anterior.
+  rolarDiaSeVirou();
+
   const dotG = $("dot-g"), stG = $("status-g");
   dotG.className = "dot-g";
   stG.textContent = "atualizando...";
@@ -3283,24 +3314,50 @@ async function atualizarDiario() {
     stG.textContent = "erro: " + e.message;
   }
 
-  // Só inicia countdown automático se estiver vendo hoje
-  if (dataSelecionada === hojeStr()) {
+  // Só mantém a atualização automática se estiver acompanhando "hoje"
+  // (V72: continua valendo logo após a virada de dia — ver rolarDiaSeVirou()).
+  if (seguindoHoje) {
     iniciarCountdown();
+  } else {
+    setAutoLive(false);
   }
+}
+
+// V72: indicador de atualização "embutido" — substitui a antiga barra +
+// contagem regressiva. ativo=true → ponto pulsante "ao vivo".
+function setAutoLive(ativo, rotulo) {
+  const pill = $("auto-pill");
+  if (pill) pill.classList.toggle("off", !ativo);
+  const st = $("auto-status");
+  if (st) st.textContent = rotulo || (ativo ? "ao vivo" : "—");
 }
 
 function iniciarCountdown() {
   clearInterval(countdownTimer);
   countdownVal = INTERVALO;
-  set("countdown", countdownVal);
-  const bar = $("countdown-bar");
-  if (bar) bar.style.width = "100%";
+  setAutoLive(true);
+  // O contador segue rodando internamente apenas para disparar o refresh
+  // a cada INTERVALO segundos; não há mais barra/número visível.
   countdownTimer = setInterval(() => {
     countdownVal--;
-    set("countdown", countdownVal);
-    if (bar) bar.style.width = ((countdownVal/INTERVALO)*100).toFixed(1)+"%";
     if (countdownVal <= 0) atualizar();
   }, 1000);
+}
+
+// V72: virada de dia automática. Enquanto o usuário acompanha "hoje", ao
+// passar da meia-noite a data selecionada avança sozinha para o novo dia,
+// evitando que o dashboard fique preso no dia anterior.
+function rolarDiaSeVirou() {
+  if (modoVisao !== "diario") return false;
+  if (!seguindoHoje)          return false;
+  const hoje = hojeStr();
+  if (dataSelecionada === hoje) return false;
+  dataSelecionada = hoje;
+  const dp = $("date-picker");
+  if (dp) { dp.value = hoje; dp.max = hoje; }
+  try { atualizarBadgeData(); } catch(e) {}
+  try { atualizarPrevisao(USINA_ATIVA, hoje); } catch(e) {}
+  return true;
 }
 
 // ============================================================
@@ -3719,60 +3776,6 @@ function _ocultarHeatmap() {
   if (card) card.style.display = "none";
 }
 
-// ============================================================
-//  V71 - BUSCA MENSAL VIA API v2
-// ------------------------------------------------------------
-//  Chama /mensal/{aaaa-mm} e monta o MESMO array 'linhas' que
-//  parseResumoMes() produzia, para que atualizarMensal() e
-//  atualizarAnual() funcionem sem alteracao.
-//  Cada item de 'linhas':
-//    {data, energia_kwh, pac_medio, pico_pac, hora_pico,
-//     insolacao_h, status, disp_por_inv:{nome:pct}}
-//  Tambem guarda por_inversor cru no cache _mensalPorInv[mes]
-//  para o "grafico em 8".
-// ============================================================
-let _mensalPorInvCache = {};   // "aaaa-mm" -> por_inversor da API
-
-async function buscarMensalAPIComoLinhas(ano, mes) {
-  const base = getApiUrl();
-  const mm = String(mes).padStart(2, "0");
-  const chave = ano + "-" + mm;
-  let dados;
-  try {
-    const r = await fetch(base + "/mensal/" + chave);
-    if (!r.ok) return null;
-    dados = await r.json();
-  } catch (e) { return null; }
-
-  if (!dados || !dados.dias || dados.dias.length === 0) return null;
-
-  // Guarda por_inversor para o grafico em 8
-  _mensalPorInvCache[chave] = dados.por_inversor || [];
-
-  // Monta disp_por_inv por data: { "2026-05-01": {"Inversor 1": 90, ...}, ... }
-  const dispPorData = {};
-  for (const inv of (dados.por_inversor || [])) {
-    for (const d of (inv.dias || [])) {
-      if (!dispPorData[d.data]) dispPorData[d.data] = {};
-      dispPorData[d.data][inv.nome] = d.disponibilidade != null ? d.disponibilidade : 0;
-    }
-  }
-
-  // Monta o array linhas no formato do parseResumoMes
-  const linhas = dados.dias.map(d => ({
-    data:        d.data,
-    energia_kwh: d.energia_kwh || 0,
-    pac_medio:   d.pac_medio_kw || 0,
-    pico_pac:    d.pico_kw || 0,
-    hora_pico:   d.pico_hora || "",
-    insolacao_h: d.insolacao_h != null ? d.insolacao_h : null,
-    status:      (d.energia_kwh || 0) > 0 ? "OK" : "SEM_DADOS",
-    disp_por_inv: dispPorData[d.data] || null,
-  }));
-
-  return linhas;
-}
-
 async function atualizarMensal() {
   const dotG = $("dot-g"), stG = $("status-g");
   dotG.className = "dot-g";
@@ -3780,7 +3783,9 @@ async function atualizarMensal() {
 
   try {
     const [ano, mes] = mesSelecionado.split("-").map(Number);
-    const linhas = await buscarMensalAPIComoLinhas(ano, mes);
+    const url = resumoUrl(ano, mes);
+    const texto = await fetchTexto(url);
+    const linhas = parseResumoMes(texto);
 
     if (!linhas) {
       throw new Error("resumo do mês " + mesSelecionado + " não encontrado");
@@ -3823,7 +3828,8 @@ async function atualizarMensal() {
     // Busca resumo do mês anterior em paralelo
     let mesAntAno = ano, mesAntMes = mes - 1;
     if (mesAntMes === 0) { mesAntMes = 12; mesAntAno = ano - 1; }
-    const linhasAnt = await buscarMensalAPIComoLinhas(mesAntAno, mesAntMes);
+    const txtAnt = await fetchTexto(resumoUrl(mesAntAno, mesAntMes));
+    const linhasAnt = parseResumoMes(txtAnt);
     let energiaAnt = null, picoAnt = null;
     if (linhasAnt) {
       energiaAnt = 0;
@@ -3935,12 +3941,10 @@ async function atualizarAnual() {
     const hojeMes = parseInt(hoje.slice(5, 7));
     const mesLimite = (ano === hojeAno) ? hojeMes : 12;
 
-    // Busca todos os resumos mensais em paralelo (via API)
+    // Busca todos os resumos em paralelo
     const promessas = [];
     for (let m = 1; m <= mesLimite; m++) {
-      promessas.push(
-        buscarMensalAPIComoLinhas(ano, m).then(linhas => ({ mes: m, linhas: linhas }))
-      );
+      promessas.push(fetchTexto(resumoUrl(ano, m)).then(t => ({ mes: m, linhas: parseResumoMes(t) })));
     }
     const todos = await Promise.all(promessas);
 
@@ -4128,18 +4132,26 @@ dp.value = hojeStr();
 dp.max   = hojeStr();
 dp.addEventListener("change", () => {
   dataSelecionada = dp.value;
+  // V72: acompanha "ao vivo" só quando a data escolhida é hoje
+  seguindoHoje = (dataSelecionada === hojeStr());
   atualizarBadgeData();
-  // Se data histórica, pausa countdown automático
-  if (dataSelecionada !== hojeStr()) {
+  // Se data histórica, pausa a atualização automática e desliga o indicador
+  if (!seguindoHoje) {
     clearInterval(countdownTimer);
-    set("countdown", "—");
-    const bar = $("countdown-bar");
-    if (bar) bar.style.width = "0%";
+    setAutoLive(false);
   }
   atualizar();
   // Atualiza previsao com a data selecionada
   try { atualizarPrevisao("pk", dataSelecionada); } catch(e) {}
 });
+
+// V72: vigia da virada de dia — a cada 30s, se estamos acompanhando "hoje"
+// e o relógio passou da meia-noite, avança o dia e recarrega na hora (sem
+// esperar o ciclo de 4 min), garantindo que a tela nunca fique presa no
+// dia anterior.
+setInterval(() => {
+  try { if (rolarDiaSeVirou()) atualizar(); } catch(e) {}
+}, 30 * 1000);
 
 // ===== Pickers Mensal e Anual =====
 const mp = $("month-picker");
@@ -4255,6 +4267,7 @@ function trocarUsina(slug) {
   try {
     if (typeof dataSelecionada !== 'undefined') {
       dataSelecionada = hojeStr();
+      seguindoHoje = true;   // V72: nova usina abre acompanhando "hoje"
       const dp = document.getElementById('date-picker');
       if (dp) { dp.value = hojeStr(); dp.max = hojeStr(); }
       if (typeof atualizarBadgeData === 'function') atualizarBadgeData();
