@@ -1403,8 +1403,8 @@
   <div class="date-bar">
     <div class="modo-toggle" role="group" aria-label="Modo de visualização">
       <button type="button" class="mt-btn ativo" data-modo="diario" onclick="trocarModo('diario')">Diário</button>
-      <button type="button" class="mt-btn"       data-modo="mensal" onclick="trocarModo('mensal')" title="Desativado nesta versão de teste" style="opacity:.45">Mensal</button>
-      <button type="button" class="mt-btn"       data-modo="anual"  onclick="trocarModo('anual')" title="Desativado nesta versão de teste" style="opacity:.45">Anual</button>
+      <button type="button" class="mt-btn"       data-modo="mensal" onclick="trocarModo('mensal')">Mensal</button>
+      <button type="button" class="mt-btn"       data-modo="anual"  onclick="trocarModo('anual')">Anual</button>
     </div>
     <label style="margin-left:12px;font-size:.8rem;opacity:.8">API:</label>
     <input type="text" class="date-input" id="api-url-input"
@@ -1708,36 +1708,26 @@ try { atualizarPrevisao("pk"); } catch(e) { console.warn("previsao inicial falho
 setInterval(_refreshPrevisaoSeHoje, 30 * 60 * 1000);
 
 // ===== CONFIGURACAO POR USINA =====
-// Cada usina tem sua propria lista de inversores e suas pastas de CSV.
+// Cada usina tem sua propria lista de inversores.
 // Quando o usuario clica em outra aba na sidebar, USINA_ATIVA muda e os
-// valores `let` abaixo (NOMES, CSV_DIR_LIVE, CSV_DIR_BD) sao reescritos.
+// valores `let` abaixo (NOMES, CSV_DIR_BD) sao reescritos.
 const USINAS_CONFIG = {
   pk: {
     nomes: [
       "Inversor 1","Inversor 2","Inversor 3","Inversor 4",
       "Inversor 5","Inversor 6","Inversor 7","Inversor 8"
     ],
-    csvDirLive: "/LOGTESTE",
     csvDirBd:   "/Banco%20de%20Dados",
   },
   ibiracu: {
     nomes: ["Inversor 1","Inversor 2"],
-    csvDirLive: "/LOGTESTE/ibiracu",
     csvDirBd:   "/Banco%20de%20Dados/ibiracu",
   },
 };
 
 let USINA_ATIVA = "pk";
-let CSV_DIR_LIVE = USINAS_CONFIG.pk.csvDirLive;
 let CSV_DIR_BD   = USINAS_CONFIG.pk.csvDirBd;
 
-function csvUrlParaData(dataStr) {
-  // dataStr: "2026-05-05" → "2026_05/2026_05_05.csv"
-  const partes   = dataStr.split("-");
-  const subpasta = partes[0] + "_" + partes[1];
-  const arquivo  = partes.join("_") + ".csv";
-  return subpasta + "/" + arquivo;
-}
 const INTERVALO = 240;   // V72: 4 minutos (a Chint publica a cada 5 min)
 const LARGURA_PT = 55;
 const NUM_MPPT  = 12;
@@ -1770,7 +1760,7 @@ let chartTotal, chartEnergia, countdownVal = INTERVALO, countdownTimer;
 // Mini-graficos dentro de cada card de inversor expandido.
 // pacPorInvHoje:  { "Inversor 1": [{x: "06:00", y: 12.3}, ...], "Inversor 2": [...] }
 // miniCharts:     { 0: ChartJS, 1: ChartJS, ... } indexado por idx do card
-// Estado e zerado a cada parseCSV (novo dia/usina). Os charts sao destruidos
+// Estado e zerado a cada nova carga de dados (novo dia/usina). Os charts sao destruidos
 // antes da reconstrucao para evitar memory leaks do Chart.js.
 let pacPorInvHoje = {};
 const miniCharts  = {};
@@ -1829,64 +1819,6 @@ function dataAnteriorStr(dataStr) {
   return dt.getFullYear()+"-"+String(dt.getMonth()+1).padStart(2,"0")+"-"+String(dt.getDate()).padStart(2,"0");
 }
 
-// Busca CSV silenciosamente para uma data — retorna texto ou null
-async function fetchCSVPorData(dataStr) {
-  const nomeArq = csvUrlParaData(dataStr);
-  const candidatos = [
-    CSV_DIR_BD   + "/" + nomeArq,
-    CSV_DIR_LIVE + "/" + nomeArq,
-  ];
-  for (const url of candidatos) {
-    try {
-      const r = await fetch(url + "?t=" + Date.now());
-      if (r.ok) return await r.text();
-    } catch(e) { /* silencioso */ }
-  }
-  return null;
-}
-
-// Parse simplificado para comparação: extrai pacPorSlot (HH:MM → soma kW)
-// e energiaTotalDia (max DYield somado entre inversores)
-function parseCSVParaComparacao(texto, dataAlvo) {
-  if (!texto) return null;
-  const linhas = texto.trim().split("\n")
-    .map(l => l.split(";").map(c => c.trim().replace(/^"|"$/g,"")));
-  if (linhas.length < 3) return null;
-
-  const h = linhas[0];
-  const iData = h.indexOf("Data_Hora");
-  const iPac  = h.indexOf("Pac_kW");
-  const iDY   = h.indexOf("DYield_kWh");
-  if (iData < 0 || iPac < 0 || iDY < 0) return null;
-
-  const pacPorSlot = {}; // HH:MM → soma Pac_kW
-  const enrgPorSlot = {}; // HH:MM → soma DYield_kWh
-  let temDados = false;
-
-  for (let i = 2; i < linhas.length; i++) {
-    const l = linhas[i];
-    if (l.length < 5) continue;
-    const dh = l[iData] ?? "";
-    if (!dh.startsWith(dataAlvo)) continue;
-    const m = dh.match(/(\d{2}):(\d{2})/);
-    if (!m) continue;
-    const hhmm = m[1] + ":" + m[2];
-    const pac = parseFloat(l[iPac]) || 0;
-    const dy  = parseFloat(l[iDY])  || 0;
-    pacPorSlot[hhmm]  = (pacPorSlot[hhmm]  ?? 0) + pac;
-    enrgPorSlot[hhmm] = (enrgPorSlot[hhmm] ?? 0) + dy;
-    temDados = true;
-  }
-  if (!temDados) return null;
-
-  // Energia total do dia = maior soma de DYield entre todos os slots
-  // (DYield é cumulativo durante o dia, então o pico é o total do dia)
-  const valoresEnrg = Object.values(enrgPorSlot);
-  const energiaTotalDia = valoresEnrg.length ? Math.max(...valoresEnrg) : 0;
-
-  return { pacPorSlot, energiaTotalDia };
-}
-
 // Encontra o slot mais próximo (em minutos) dentro de uma tolerância
 function buscarPacMaisProximo(pacPorSlot, hhmmAlvo, tolMin = 5) {
   if (pacPorSlot[hhmmAlvo] !== undefined) return pacPorSlot[hhmmAlvo];
@@ -1941,15 +1873,6 @@ let anoSelecionado   = parseInt(hojeStr().slice(0, 4)); // 2026
 function trocarModo(novo) {
   if (!["diario", "mensal", "anual"].includes(novo)) return;
   if (novo === modoVisao) return;
-
-  // V71: modos mensal e anual desativados nesta fase de teste.
-  // Serao reativados quando a API tiver os endpoints de resumo.
-  if (novo === "mensal" || novo === "anual") {
-    alert("Os modos Mensal e Anual estao desativados nesta versao de "
-        + "teste (V71). Apenas o modo Diario consome a API. Os outros "
-        + "modos serao reativados na proxima fase.");
-    return;
-  }
 
   modoVisao = novo;
 
@@ -2100,13 +2023,12 @@ function atualizarBadgeData() {
   }
 }
 
-// ── Parse CSV ─────────────────────────────────────────────────────────────────
+// ── Busca de dados diários via API ─────────────────────────────────────────────
 // ============================================================
 //  V71 - BUSCA DO MODO DIARIO VIA API v2
 // ------------------------------------------------------------
-//  Le os enderecos da API v2 e monta o MESMO objeto que
-//  parseCSV() produz, para que todo o resto do codigo do modo
-//  diario funcione sem alteracao.
+//  Le os enderecos da API v2 e monta o objeto de dados do dia
+//  consumido pelo modo diario.
 //
 //  Enderecos consumidos (API v2), sempre com ?usina=<slug> (V72):
 //    /dia/{data}                  -> resumo + curva total da usina
@@ -2279,308 +2201,6 @@ async function buscarDiaAPI(dataStr) {
     pacPorInvSerie,
     alarmes: [],   // alarmes nao migrados nesta fase de teste
   };
-}
-
-function parseCSV(texto) {
-  const linhas = texto.trim().split("\n")
-    .map(l => l.split(";").map(c => c.trim().replace(/^"|"$/g,"")));
-  if (linhas.length < 3) return null;
-
-  const h = linhas[0];
-  const iData  = h.indexOf("Data_Hora");
-  const iNome  = h.indexOf("Inversor");
-  const iSN    = h.indexOf("Serial_SN");
-  const iStat  = h.indexOf("Status");
-  const iPac   = h.indexOf("Pac_kW");
-  const iDY    = h.indexOf("DYield_kWh");
-  const iTY    = h.indexOf("TYield_kWh");
-  const iFreq  = h.indexOf("Freq_Hz");
-  const iTmod  = h.indexOf("Tmod_C");
-  const iTamb  = h.indexOf("Tamb_C");
-  const iIso   = h.indexOf("ISO_kOhm");
-  const iPdc   = h.indexOf("Pdc_kW");
-  // MPPT: MPPT1_V, MPPT1_I_A, ...
-  const iMV1   = h.indexOf("MPPT1_V");
-  const iMI1   = h.indexOf("MPPT1_I_A");
-  // Strings: PV1_I_A, PV1_P_W, ...
-  const iPI1   = h.indexOf("PV1_I_A");
-  const iPP1   = h.indexOf("PV1_P_W");
-  // V60: coluna Alarme (opcional — CSVs antigos podem não ter)
-  // -1 indica formato V19 ou anterior, onde alarmes não são suportados.
-  const iAlarme = h.indexOf("Alarme");
-
-  const grafico = {};
-  const ultimas = {};
-  let temDadosData = false;
-
-  for (let i = 2; i < linhas.length; i++) {
-    const l = linhas[i];
-    if (l.length < 15) continue;
-
-    const nome = l[iNome] ?? "";
-    const pac  = parseFloat(l[iPac]) || 0;
-    const dh   = l[iData] ?? "";
-
-    // Ultimas leituras: sempre da data selecionada
-    if (nome && dh.startsWith(dataSelecionada)) {
-      const mppt = [];
-      for (let m = 0; m < NUM_MPPT; m++) {
-        mppt.push({
-          v: parseFloat(l[iMV1 + m]) || 0,
-          i: parseFloat(l[iMI1 + m]) || 0,
-        });
-      }
-      const strings = [];
-      for (let s = 0; s < NUM_STR; s++) {
-        const mppt_n = Math.floor(s / 2);
-        strings.push({
-          n:    s + 1,
-          i:    parseFloat(l[iPI1 + s]) || 0,
-          p:    parseFloat(l[iPP1 + s]) || 0,
-          v:    mppt[mppt_n]?.v ?? 0,
-          mppt: mppt_n + 1,
-        });
-      }
-      ultimas[nome] = {
-        dataHora: dh,
-        sn:       l[iSN]    ?? "",
-        status:   l[iStat]  ?? "",
-        pac_kw:   pac,
-        dy_kwh:   parseFloat(l[iDY])   || 0,
-        ty_kwh:   parseFloat(l[iTY])   || 0,
-        freq:     parseFloat(l[iFreq]) || 0,
-        tmod:     parseFloat(l[iTmod]) || 0,
-        tamb:     parseFloat(l[iTamb]) || 0,
-        iso:      parseFloat(l[iIso])  || 0,
-        pdc_kw:   parseFloat(l[iPdc])  || 0,
-        mppt,
-        strings,
-      };
-      temDadosData = true;
-    }
-
-    // Gráfico — data selecionada, apenas timestamps múltiplos de 5 min
-    if (!dh.startsWith(dataSelecionada)) continue;
-    const m = dh.match(/(\d{2}):(\d{2})/);
-    if (!m) continue;
-    const hhmm = m[1] + ":" + m[2];
-    grafico[hhmm] = (grafico[hhmm] ?? 0) + pac;
-  }
-
-  // Gráfico de energia: soma DYield de todos inversores por slot (energia total da usina)
-  // Regex aceita tanto "HH:MM:SS" quanto "HH:MM" (CSV histórico não tem segundos)
-  const enrgSlot  = {}; // HH:MM → soma DYield
-  const enrgCount = {}; // HH:MM → contagem de inversores (para debug)
-  for (let i = 2; i < linhas.length; i++) {
-    const l  = linhas[i];
-    const dh = l[iData] ?? "";
-    if (!dh.startsWith(dataSelecionada) || l.length < 15) continue;
-    // Aceita "HH:MM:SS" e "HH:MM" — captura HH e MM
-    const m = dh.match(/(\d{2}):(\d{2})/);
-    if (!m) continue;
-    const hhmm = m[1] + ":" + m[2];
-    const dy   = parseFloat(l[iDY]) || 0;
-    enrgSlot[hhmm]  = (enrgSlot[hhmm]  ?? 0) + dy;
-    enrgCount[hhmm] = (enrgCount[hhmm] ?? 0) + 1;
-  }
-  const enrg = enrgSlot;
-
-  // Energia por intervalo de 15min (para plotar no gráfico de barras)
-  // Estratégia: agrupa todos os timestamps em janelas de 15min, calcula a média
-  // do Pac_kW_total naquela janela e multiplica por 15/60 para obter kWh.
-  // Janela atribuída pelo timestamp truncado para baixo:
-  //   12:00, 12:05, 12:10 → janela "12:00"
-  //   12:15, 12:20, 12:25 → janela "12:15"
-  const INTERVALO_MIN = 15;
-  const acumPac = {};   // janelaHHMM → soma de Pac_kW_total
-  const acumCnt = {};   // janelaHHMM → quantidade de pontos somados
-  for (const hhmm of Object.keys(grafico)) {
-    const [hh, mm] = hhmm.split(":").map(Number);
-    const janelaMin = Math.floor(mm / INTERVALO_MIN) * INTERVALO_MIN;
-    const chave = String(hh).padStart(2,"0") + ":" + String(janelaMin).padStart(2,"0");
-    acumPac[chave] = (acumPac[chave] ?? 0) + grafico[hhmm];
-    acumCnt[chave] = (acumCnt[chave] ?? 0) + 1;
-  }
-  const enrgIntervalo = {}; // janelaHHMM → kWh gerados nos 15 min
-  for (const chave of Object.keys(acumPac)) {
-    const pacMedio = acumPac[chave] / acumCnt[chave];
-    enrgIntervalo[chave] = (pacMedio * INTERVALO_MIN) / 60;
-  }
-
-  // Disponibilidade: leituras com Pac_kW > 0 entre 06:00 e min(última leitura, 18:00)
-  // Denominador dinâmico: slots de 5 min entre 06:00 e horário da última leitura (máx 18:00)
-  const HORA_INI    = 6;
-  const HORA_FIM    = 18;
-  const dispGerando = {}; // slots com Pac > 0 por inversor
-  const dispUltimaMin = {}; // minuto absoluto da última leitura por inversor (dentro da janela)
-
-  // Para média de performance 06-18h por inversor (só conta slots com Pac > 0)
-  const pacAcum = {};      // soma de Pac (kW) por inversor na janela 06-18h
-  const pacAcumCnt = {};   // qtd de leituras com Pac > 0 contadas
-
-  // Para pico AC total do dia: soma instantânea por timestamp
-  const pacPorTs = {};     // timestamp HH:MM → soma de Pac dos 8 inversores
-
-  // Mini-grafico do card: serie de Pac por inversor ao longo do dia.
-  // Estrutura: { "Inversor 1": [{x: "06:00", y: 12.3}, ...], ... }
-  // Slots agregados por (HH:MM) e ordenados cronologicamente no fim.
-  const pacPorInv = {};
-
-  for (let i = 2; i < linhas.length; i++) {
-    const l  = linhas[i];
-    const dh = l[iData] ?? "";
-    if (!dh.startsWith(dataSelecionada) || l.length < 5) continue;
-    const nome = l[iNome] ?? "";
-    const pac  = parseFloat(l[iPac]) || 0;
-    if (!nome) continue;
-
-    const mHora = dh.match(/(\d{2}):(\d{2})/);
-    if (!mHora) continue;
-    const hora = parseInt(mHora[1]);
-    const min  = parseInt(mHora[2]);
-
-    // Pico AC total do dia (qualquer hora, não só 06-18h)
-    const tsKey = mHora[1] + ":" + mHora[2];
-    pacPorTs[tsKey] = (pacPorTs[tsKey] ?? 0) + pac;
-
-    // Serie do inversor (para mini-grafico do card expandido).
-    // Acumula o Pac por timestamp (caso haja duplicatas no slot, soma).
-    if (!pacPorInv[nome]) pacPorInv[nome] = {};
-    pacPorInv[nome][tsKey] = (pacPorInv[nome][tsKey] ?? 0) + pac;
-
-    // Só conta slots dentro da janela 06:00–18:00
-    const dentroJanela = (hora > HORA_INI || (hora === HORA_INI && min >= 0)) &&
-                         (hora < HORA_FIM);
-    if (!dentroJanela) continue;
-
-    // Rastreia o minuto absoluto mais recente dentro da janela
-    const minAbs = hora * 60 + min;
-    if (dispUltimaMin[nome] === undefined || minAbs > dispUltimaMin[nome]) {
-      dispUltimaMin[nome] = minAbs;
-    }
-
-    if (pac > 0) {
-      dispGerando[nome] = (dispGerando[nome] ?? 0) + 1;
-      pacAcum[nome]    = (pacAcum[nome]    ?? 0) + pac;
-      pacAcumCnt[nome] = (pacAcumCnt[nome] ?? 0) + 1;
-    }
-  }
-
-  // Performance média de potência (06-18h) por inversor: média do Pac só nos slots ativos
-  const pacMediaPorInv = {};
-  for (const nome of Object.keys(pacAcum)) {
-    pacMediaPorInv[nome] = pacAcumCnt[nome] > 0 ? pacAcum[nome] / pacAcumCnt[nome] : 0;
-  }
-
-  // Pico AC total do dia
-  let pacPicoTotal = 0;
-  let pacPicoHora  = "";
-  for (const ts of Object.keys(pacPorTs)) {
-    if (pacPorTs[ts] > pacPicoTotal) {
-      pacPicoTotal = pacPorTs[ts];
-      pacPicoHora  = ts;
-    }
-  }
-
-  // Calcula slots possíveis por inversor: de 06:00 até última leitura (ou 18:00)
-  const dispSlotsPossiveis = {};
-  for (const nome of Object.keys(dispUltimaMin)) {
-    const inicioMin = HORA_INI * 60;  // 360 min
-    const fimMin    = Math.min(dispUltimaMin[nome], HORA_FIM * 60 - 5); // máx 17:55
-    // Slots de 5 em 5 minutos: (fimMin - inicioMin) / 5 + 1
-    dispSlotsPossiveis[nome] = Math.max(Math.floor((fimMin - inicioMin) / 5) + 1, 1);
-  }
-
-  // ── ALARMES (V60) ────────────────────────────────────────────────────
-  // Lê a coluna Alarme do CSV. Agrupa por (inversor + tipo) em "episódios"
-  // contíguos para que o usuário veja "Inversor 3 offline de 10:00 a 10:30"
-  // em vez de 7 linhas separadas. Episódios diferentes do mesmo inversor
-  // (separados por algum ONLINE) aparecem como entradas distintas.
-  //
-  // Estrutura retornada: array de { inversor, tipo, inicio, fim, leituras }
-  // ordenado cronologicamente pelo início do episódio.
-  const alarmes = [];
-  if (iAlarme >= 0) {
-    // Mapa: chave "inversor||tipo" → último timestamp visto (para agrupar contíguos)
-    // Como o CSV vem ordenado cronologicamente, basta verificar se a linha atual
-    // continua um episódio em aberto (mesmo inversor + tipo + timestamp consecutivo
-    // = anterior + 5 min) ou abre um novo.
-    const episodiosAbertos = {};  // chave → índice em `alarmes`
-
-    for (let i = 2; i < linhas.length; i++) {
-      const l = linhas[i];
-      if (l.length <= iAlarme) continue;
-      const tipo = l[iAlarme] ?? "";
-      if (tipo === "") continue;   // sem alarme nessa linha
-
-      const dh   = l[iData] ?? "";
-      const nome = l[iNome] ?? "";
-      if (!dh.startsWith(dataSelecionada)) continue;
-
-      const chave = nome + "||" + tipo;
-      const epIdx = episodiosAbertos[chave];
-
-      // Tenta calcular se este timestamp é consecutivo ao último do mesmo episódio
-      let contiguo = false;
-      if (epIdx !== undefined) {
-        const ep = alarmes[epIdx];
-        const ultMs = _tsParaMs(ep.fim);
-        const curMs = _tsParaMs(dh);
-        if (ultMs !== null && curMs !== null && (curMs - ultMs) <= 5 * 60 * 1000 + 30 * 1000) {
-          contiguo = true;
-        }
-      }
-
-      if (contiguo) {
-        // Estende episódio existente
-        alarmes[epIdx].fim = dh;
-        alarmes[epIdx].leituras += 1;
-      } else {
-        // Novo episódio
-        alarmes.push({
-          inversor: nome,
-          tipo:     tipo,    // "OFFLINE_PERSISTENTE" | "ERRO_PERSISTENTE"
-          inicio:   dh,
-          fim:      dh,
-          leituras: 1,
-        });
-        episodiosAbertos[chave] = alarmes.length - 1;
-      }
-    }
-
-    // Reordena por timestamp de início (mais recente primeiro, para UI)
-    alarmes.sort((a, b) => {
-      const ma = _tsParaMs(a.inicio) || 0;
-      const mb = _tsParaMs(b.inicio) || 0;
-      return mb - ma;
-    });
-  }
-
-  // Converte pacPorInv: { "Inv1": {"06:00": 12.3, ...} } → { "Inv1": [{x,y}, ...] }
-  // ordenado cronologicamente. Usado pelo mini-grafico do card expandido.
-  const pacPorInvSerie = {};
-  for (const nome of Object.keys(pacPorInv)) {
-    const slots = Object.keys(pacPorInv[nome]).sort();   // "HH:MM" classifica certo
-    pacPorInvSerie[nome] = slots.map(s => ({ x: s, y: pacPorInv[nome][s] }));
-  }
-
-  return { grafico, enrg, enrgIntervalo, ultimas, temDadosData,
-           dispGerando, dispSlotsPossiveis,
-           pacMediaPorInv, pacPicoTotal, pacPicoHora,
-           pacPorInvSerie,
-           alarmes };
-}
-
-// V60: converte timestamp "YYYY-MM-DD HH:MM" em milissegundos para comparação.
-// Retorna null se o formato for inesperado.
-function _tsParaMs(ts) {
-  if (!ts || ts.length < 16) return null;
-  const m = ts.match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})/);
-  if (!m) return null;
-  return new Date(
-    parseInt(m[1]), parseInt(m[2]) - 1, parseInt(m[3]),
-    parseInt(m[4]), parseInt(m[5]), 0
-  ).getTime();
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -3067,7 +2687,7 @@ function renderCard(idx, d, dispGerando, dispPossiveis, pacMedia06_18, ehHistori
 // MINI-GRAFICO DE POT. INSTANTANEA POR INVERSOR (dentro do card expandido)
 // ============================================================================
 // Cria/atualiza um Chart.js para o card de indice `idx`. Le a serie temporal
-// de pacPorInvHoje[nome] (populada pelo parseCSV apos cada atualizacao).
+// de pacPorInvHoje[nome] (populada pela API apos cada atualizacao).
 // - Cor: laranja (#FF9B22), mesma da linha principal "Hoje"
 // - Eixo X: HH:MM (cronologico, conforme dados disponiveis)
 // - Eixo Y: auto, kW
@@ -3305,7 +2925,7 @@ async function atualizarDiario() {
     stG.textContent = invOnline + " de " + NOMES.length + " online";
     set("footer", "última atualização: " + new Date().toLocaleTimeString("pt-BR"));
 
-    // V60: renderiza alarmes do dia (silencioso quando CSV não tem coluna Alarme)
+    // V60: renderiza alarmes do dia
     renderAlarmes(dados.alarmes || [], dataSelecionada);
 
   } catch(e) {
@@ -3572,63 +3192,6 @@ function _setLabelKpi(kpiSelector, novoTexto) {
 // Reaproveita a mesma lógica do modo diário:
 //   slots de 5min com Pac > 0 entre 06:00–18:00 / total de slots possíveis
 // ============================================================
-
-// [DEPRECATED desde V51.1] Cálculo da disponibilidade no FRONT a partir do
-// CSV diário. Não é mais usado pelo heatmap (que agora lê do resumo mensal),
-// mas mantido para retrocompatibilidade caso outro código chame.
-// Retorna: { "Inversor 1": 87.3, "Inversor 2": 92.1, ... }
-function _calcDispDoCsv(texto, dataAlvo) {
-  if (!texto) return {};
-  const linhas = texto.trim().split("\n")
-    .map(l => l.split(";").map(c => c.trim().replace(/^"|"$/g, "")));
-  if (linhas.length < 3) return {};
-
-  const h = linhas[0];
-  const iData = h.indexOf("Data_Hora");
-  const iNome = h.indexOf("Inversor");
-  const iPac  = h.indexOf("Pac_kW");
-  if (iData < 0 || iNome < 0 || iPac < 0) return {};
-
-  const HORA_INI = 6, HORA_FIM = 18;
-  const gerando = {};       // nome → slots com Pac > 0
-  const ultimaMin = {};     // nome → minuto absoluto da última leitura na janela
-
-  for (let i = 2; i < linhas.length; i++) {
-    const l = linhas[i];
-    if (l.length < 5) continue;
-    const dh = l[iData] ?? "";
-    if (!dh.startsWith(dataAlvo)) continue;
-    const nome = l[iNome] ?? "";
-    if (!nome) continue;
-    const pac = parseFloat(l[iPac]) || 0;
-
-    const m = dh.match(/(\d{2}):(\d{2})/);
-    if (!m) continue;
-    const hora = parseInt(m[1]);
-    const min  = parseInt(m[2]);
-    const dentroJanela = (hora >= HORA_INI) && (hora < HORA_FIM);
-    if (!dentroJanela) continue;
-
-    const minAbs = hora * 60 + min;
-    if (ultimaMin[nome] === undefined || minAbs > ultimaMin[nome]) {
-      ultimaMin[nome] = minAbs;
-    }
-    if (pac > 0) {
-      gerando[nome] = (gerando[nome] ?? 0) + 1;
-    }
-  }
-
-  // % de disponibilidade por inversor: gerando / slots_possiveis (5 em 5 min)
-  const out = {};
-  for (const nome of Object.keys(ultimaMin)) {
-    const inicioMin = HORA_INI * 60;
-    const fimMin    = Math.min(ultimaMin[nome], HORA_FIM * 60 - 5);
-    const slotsPossiveis = Math.max(Math.floor((fimMin - inicioMin) / 5) + 1, 1);
-    const pct = Math.min((gerando[nome] ?? 0) / slotsPossiveis * 100, 100);
-    out[nome] = pct;
-  }
-  return out;
-}
 
 // Renderiza o heatmap de disponibilidade a partir das linhas JÁ PARSEADAS do
 // resumo mensal. NÃO faz mais nenhum fetch — toda a informação vem em uma
@@ -4226,7 +3789,6 @@ function trocarUsina(slug) {
   // ── 4. Reescreve estado global pra apontar pra nova usina ───────────
   USINA_ATIVA  = slug;
   NOMES        = cfgUsina.nomes.slice();
-  CSV_DIR_LIVE = cfgUsina.csvDirLive;
   CSV_DIR_BD   = cfgUsina.csvDirBd;
 
   // ── 5. Atualiza topbar (titulo + numero de inversores) ──────────────
@@ -4298,7 +3860,7 @@ function trocarUsina(slug) {
   try { initChart();  } catch(e) { console.error('initChart falhou:',  e); }
   try { atualizarPrevisao(slug); } catch(e) { console.warn('previsao falhou:', e); }
 
-  // ── 13. Dispara atualizacao com os CSVs da nova usina ───────────────
+  // ── 13. Dispara atualização da nova usina ───────────────────────────
   try { atualizar(); } catch(e) { console.error('atualizar falhou:', e); }
 }
 
