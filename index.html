@@ -3044,6 +3044,66 @@ function parseResumoMes(texto) {
     });
 }
 
+// ============================================================
+// LEITURA DO RESUMO MENSAL VIA API v2  (substitui o CSV)
+// ------------------------------------------------------------
+// Busca /mensal/AAAA-MM?usina=<slug> e devolve as linhas no MESMO
+// formato que parseResumoMes() produzia a partir do CSV. Assim
+// atualizarMensal/atualizarAnual e todo o render (gráficos, heatmap,
+// KPIs, sparkline) continuam funcionando sem alteração.
+//
+// Vantagem: a tabela resumo_dia é reescrita pelo coletor a cada
+// ciclo de 5 min (UPSERT do dia em curso), então os modos mensal e
+// anual passam a refletir o dia de hoje ao vivo — sem depender de
+// CSV gerado fora do ciclo.
+//
+// Mapeamento de campos:
+//   API (resumo_dia)        ->  formato do dashboard
+//   energia_kwh             ->  energia_kwh
+//   pac_medio_kw            ->  pac_medio
+//   pico_kw                 ->  pico_pac
+//   pico_hora               ->  hora_pico
+//   insolacao_h             ->  insolacao_h (NULL se sem sensor)
+//   por_inversor[].disponibilidade -> disp_por_inv[nome]
+// ============================================================
+async function fetchResumoMesAPI(ano, mes) {
+  const base   = getApiUrl();
+  const a      = String(ano).padStart(4, "0");
+  const m      = String(mes).padStart(2, "0");
+  const qUsina = "?usina=" + encodeURIComponent(USINA_ATIVA);
+
+  let dados;
+  try {
+    const r = await fetch(base + "/mensal/" + a + "-" + m + qUsina);
+    if (!r.ok) return null;
+    dados = await r.json();
+  } catch (e) { return null; }
+
+  if (!dados || !Array.isArray(dados.dias) || dados.dias.length === 0) return null;
+
+  // Inverte por_inversor -> mapa { "YYYY-MM-DD": { nomeInversor: disponibilidade } }
+  // para alimentar o heatmap (que espera disp_por_inv por dia).
+  const dispPorData = {};
+  (dados.por_inversor || []).forEach(inv => {
+    (inv.dias || []).forEach(d => {
+      if (!dispPorData[d.data]) dispPorData[d.data] = {};
+      dispPorData[d.data][inv.nome] = (d.disponibilidade != null) ? d.disponibilidade : 0;
+    });
+  });
+  const temDisp = Object.keys(dispPorData).length > 0;
+
+  return dados.dias.map(d => ({
+    data:         d.data,
+    energia_kwh:  d.energia_kwh || 0,
+    pac_medio:    d.pac_medio_kw || 0,
+    pico_pac:     d.pico_kw || 0,
+    hora_pico:    d.pico_hora || "",
+    insolacao_h:  (d.insolacao_h != null) ? d.insolacao_h : null,
+    status:       (d.energia_kwh > 0) ? "OK" : "SEM_DADOS",
+    disp_por_inv: temDisp ? (dispPorData[d.data] || {}) : null,
+  }));
+}
+
 function _zerarKpisInstantaneos() {
   set("s-inv",  "—");
   set("s-freq", "—");
@@ -3346,9 +3406,7 @@ async function atualizarMensal() {
 
   try {
     const [ano, mes] = mesSelecionado.split("-").map(Number);
-    const url = resumoUrl(ano, mes);
-    const texto = await fetchTexto(url);
-    const linhas = parseResumoMes(texto);
+    const linhas = await fetchResumoMesAPI(ano, mes);
 
     if (!linhas) {
       throw new Error("resumo do mês " + mesSelecionado + " não encontrado");
@@ -3391,8 +3449,7 @@ async function atualizarMensal() {
     // Busca resumo do mês anterior em paralelo
     let mesAntAno = ano, mesAntMes = mes - 1;
     if (mesAntMes === 0) { mesAntMes = 12; mesAntAno = ano - 1; }
-    const txtAnt = await fetchTexto(resumoUrl(mesAntAno, mesAntMes));
-    const linhasAnt = parseResumoMes(txtAnt);
+    const linhasAnt = await fetchResumoMesAPI(mesAntAno, mesAntMes);
     let energiaAnt = null, picoAnt = null;
     if (linhasAnt) {
       energiaAnt = 0;
@@ -3504,10 +3561,11 @@ async function atualizarAnual() {
     const hojeMes = parseInt(hoje.slice(5, 7));
     const mesLimite = (ano === hojeAno) ? hojeMes : 12;
 
-    // Busca todos os resumos em paralelo
+    // Busca os resumos de cada mês em paralelo (via API v2).
+    // O mês em curso reflete o dia de hoje, atualizado pelo coletor.
     const promessas = [];
     for (let m = 1; m <= mesLimite; m++) {
-      promessas.push(fetchTexto(resumoUrl(ano, m)).then(t => ({ mes: m, linhas: parseResumoMes(t) })));
+      promessas.push(fetchResumoMesAPI(ano, m).then(linhas => ({ mes: m, linhas })));
     }
     const todos = await Promise.all(promessas);
 
