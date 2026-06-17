@@ -2126,7 +2126,7 @@ async function buscarDiaAPI(dataStr) {
     }
 
     ultimas[nome] = {
-      dataHora: inv.data_hora, sn: "", status: inv.status || "",
+      dataHora: inv.data_hora, sn: inv.serial_sn || "", status: inv.status || "",
       pac_kw: inv.pac_kw || 0, dy_kwh: inv.dyield_kwh || 0,
       ty_kwh: inv.tyield_kwh || 0, freq: inv.freq_hz || 0,
       tmod: inv.tmod_c || 0, tamb: inv.tamb_c || 0,
