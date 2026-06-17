@@ -260,6 +260,14 @@
       font-size: 11px; color: var(--text3); font-family: 'IBM Plex Mono', monospace;
       padding-left: 18px;
     }
+    .alarm-item-titulo {
+      font-size: 12px; color: var(--text); font-weight: 600;
+      padding-left: 18px; margin-top: 2px;
+    }
+    .alarm-item-desc {
+      font-size: 11px; color: var(--text2); line-height: 1.4;
+      padding-left: 18px; margin-top: 1px;
+    }
     .alarm-panel-empty {
       padding: 40px 16px 36px; text-align: center;
       color: var(--text3); font-size: 12px; line-height: 1.6;
@@ -2224,7 +2232,6 @@ function renderAlarmes(alarmes, dataStr) {
     if (ehHoje) {
       dataEl.textContent = "hoje";
     } else {
-      // Formato BR: DD/MM/YYYY
       const partes = dataStr.split("-");
       dataEl.textContent = partes[2] + "/" + partes[1] + "/" + partes[0];
     }
@@ -2245,7 +2252,6 @@ function renderAlarmes(alarmes, dataStr) {
     btn.title = "Nenhum alarme — tudo OK";
   }
 
-  // Renderiza lista no painel
   if (n === 0) {
     body.innerHTML =
       '<div class="alarm-panel-empty">' +
@@ -2255,34 +2261,54 @@ function renderAlarmes(alarmes, dataStr) {
     return;
   }
 
+  // Cada item vem da API /alarmes:
+  //   { origem:'chint'|'coletor', inversor, rotulo, titulo, descricao,
+  //     inicio:'YYYY-MM-DD HH:MM', fim:null|'...', checked, ocorrencias }
   let html = "";
   for (const ep of alarmes) {
-    const ehOffline = ep.tipo === "OFFLINE_PERSISTENTE";
-    const classeIcon = ehOffline ? "offline" : "erro";
-    const classeTipo = ehOffline ? "offline" : "erro";
-    const rotulo     = ehOffline ? "OFFLINE" : "ERRO";
+    const ehColetor = ep.origem === "coletor";
+    const classe = ehColetor ? "offline" : "erro";  // reaproveita estilos V60
+    const rotulo = escapeHtml(ep.rotulo || (ehColetor ? "INTERNET" : "ERRO"));
 
-    // Extrai HH:MM do início e fim do episódio.
-    // Se o episódio durou só uma leitura (inicio === fim), mostra apenas
-    // o horário em que começou. Caso contrário, mostra "HH:MM → HH:MM"
-    // representando início e fim do mesmo episódio contínuo — sem repetir
-    // as leituras intermediárias.
-    const horaIni = ep.inicio.slice(11, 16);
-    const horaFim = ep.fim.slice(11, 16);
-    const mesmoTs = ep.inicio === ep.fim;
-    const tsTexto = mesmoTs ? horaIni : (horaIni + " → " + horaFim);
+    const ini = (ep.inicio || "").slice(11, 16);
+    const fim = ep.fim ? ep.fim.slice(11, 16) : null;
+    let tsTexto;
+    if (ehColetor) {
+      tsTexto = fim ? (ini + " → " + fim) : (ini + " → agora");
+    } else {
+      tsTexto = ini;
+    }
+
+    const tituloLinha = ep.titulo ? escapeHtml(ep.titulo) : "";
+    const descLinha   = ep.descricao ? escapeHtml(ep.descricao) : "";
 
     html +=
       '<div class="alarm-item">' +
         '<div class="alarm-item-head">' +
-          '<span class="alarm-item-icon ' + classeIcon + '"></span>' +
+          '<span class="alarm-item-icon ' + classe + '"></span>' +
           '<span class="alarm-item-inv">' + escapeHtml(ep.inversor) + '</span>' +
-          '<span class="alarm-item-tipo ' + classeTipo + '">' + rotulo + '</span>' +
+          '<span class="alarm-item-tipo ' + classe + '">' + rotulo + '</span>' +
         '</div>' +
+        (tituloLinha ? '<div class="alarm-item-titulo">' + tituloLinha + '</div>' : '') +
+        (descLinha   ? '<div class="alarm-item-desc">'   + descLinha   + '</div>' : '') +
         '<div class="alarm-item-ts">⏱ ' + tsTexto + '</div>' +
       '</div>';
   }
   body.innerHTML = html;
+}
+
+// Busca os alarmes reais do dia na API (tabela 'alarmes': Chint + coletor).
+async function fetchAlarmesAPI(dataStr) {
+  const base   = getApiUrl();
+  const qUsina = "?usina=" + encodeURIComponent(USINA_ATIVA);
+  try {
+    const r = await fetch(base + "/alarmes/" + dataStr + qUsina);
+    if (!r.ok) return [];
+    const dados = await r.json();
+    return dados.alarmes || [];
+  } catch (e) {
+    return [];
+  }
 }
 
 // Pequeno helper anti-XSS — nomes de inversores são internos, mas vale a defesa.
@@ -2925,8 +2951,11 @@ async function atualizarDiario() {
     stG.textContent = invOnline + " de " + NOMES.length + " online";
     set("footer", "última atualização: " + new Date().toLocaleTimeString("pt-BR"));
 
-    // V60: renderiza alarmes do dia
-    renderAlarmes(dados.alarmes || [], dataSelecionada);
+    // Alarmes reais do dia (tabela 'alarmes' via API: Chint + falhas de
+    // leitura). Busca assincrona — nao bloqueia o resto da atualizacao.
+    fetchAlarmesAPI(dataSelecionada).then(function(lista) {
+      renderAlarmes(lista, dataSelecionada);
+    });
 
   } catch(e) {
     console.error(e);
