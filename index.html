@@ -9,7 +9,6 @@
   <style>
     /* ═══════════════════════════════════════════════════════════════════
        APOLO SOLAR — DASHBOARD
-       Versão com Inversores Chint e Canadian. Huawei ainda em construção
        Executive BI redesign. Preserves every ID and class hook used by
        the original JS — only the visual layer changed.
        Type: IBM Plex Sans (UI) + IBM Plex Mono (numeric/labels)
@@ -637,6 +636,25 @@
       font-size: 10.5px; color: var(--text3);
       margin-top: 3px; letter-spacing: 0;
     }
+
+    /* Badge marca + modelo (cor por marca) */
+    .inv-brand {
+      display: inline-flex; align-items: center; gap: 5px;
+      margin-top: 5px; padding: 2px 8px;
+      font-size: 10.5px; font-weight: 600; letter-spacing: .01em;
+      border-radius: 999px; border: 1px solid var(--border);
+      line-height: 1.4; white-space: nowrap;
+    }
+    .inv-brand::before {
+      content: ""; width: 7px; height: 7px; border-radius: 50%;
+      background: currentColor; flex: 0 0 auto;
+    }
+    .inv-brand .brand-modelo { color: var(--text3); font-weight: 500; }
+    .inv-brand:empty { display: none; }
+    .brand-chint    { color: #3fb950; background: rgba(63,185,80,.10);  border-color: rgba(63,185,80,.35); }
+    .brand-canadian { color: #f85149; background: rgba(248,81,73,.10);  border-color: rgba(248,81,73,.35); }
+    .brand-huawei   { color: #58a6ff; background: rgba(88,166,255,.10); border-color: rgba(88,166,255,.35); }
+    .brand-default  { color: var(--text3); background: var(--bg3); }
 
     .inv-metrics { display: flex; gap: 24px; align-items: center; }
     .inv-metric  { text-align: right; }
@@ -2145,6 +2163,8 @@ async function buscarDiaAPI(dataStr) {
 
     ultimas[nome] = {
       dataHora: inv.data_hora, sn: inv.serial_sn || "", status: inv.status || "",
+      marca: inv.marca || inv.fabricante || "",
+      modelo: inv.modelo || inv.modelo_nome || inv.modelo_inversor || "",
       pac_kw: inv.pac_kw || 0, dy_kwh: inv.dyield_kwh || 0,
       ty_kwh: inv.tyield_kwh || 0, freq: inv.freq_hz || 0,
       tmod: inv.tmod_c || 0, tamb: inv.tamb_c || 0,
@@ -2577,6 +2597,7 @@ function buildCards() {
           <div>
             <div class="inv-name">${nome}</div>
             <div class="inv-sn" id="isn-${idx}">—</div>
+            <div class="inv-brand" id="ibrand-${idx}"></div>
           </div>
         </div>
         <div class="inv-metrics">
@@ -2626,6 +2647,15 @@ function perfColor(pct) {
   return pct >= 80 ? "#3fb950" : pct >= 50 ? "#FF9B22" : "#f85149";
 }
 
+// Classe de cor por marca do inversor (Chint=verde, Canadian=vermelho, Huawei=azul)
+function marcaClasse(marca) {
+  const m = (marca || "").toLowerCase();
+  if (m.includes("chint"))    return "brand-chint";
+  if (m.includes("canadian")) return "brand-canadian";
+  if (m.includes("huawei"))   return "brand-huawei";
+  return "brand-default";
+}
+
 function renderCard(idx, d, dispGerando, dispPossiveis, pacMedia06_18, ehHistorico) {
   const online = d.pac_kw > 0 && d.status === "ONLINE";
   const dot = $("idot-" + idx);
@@ -2634,6 +2664,21 @@ function renderCard(idx, d, dispGerando, dispPossiveis, pacMedia06_18, ehHistori
   set("ipac-" + idx, fmt(d.pac_kw));
   set("idy-"  + idx, fmt(d.dy_kwh, 1));
   set("isn-"  + idx, d.sn ? "SN: " + d.sn : "sem SN");
+
+  // Badge marca + modelo (cor por marca)
+  const brandEl = $("ibrand-" + idx);
+  if (brandEl) {
+    const marca  = (d.marca  || "").trim();
+    const modelo = (d.modelo || "").trim();
+    if (marca || modelo) {
+      brandEl.className = "inv-brand " + marcaClasse(marca);
+      brandEl.innerHTML = (marca ? marca : "") +
+        (modelo ? ` <span class="brand-modelo">${modelo}</span>` : "");
+    } else {
+      brandEl.className = "inv-brand";
+      brandEl.innerHTML = "";   // some via .inv-brand:empty
+    }
+  }
 
   // Disponibilidade: slots com Pac>0 / slots possíveis até última leitura (máx 18:00)
   const dispPct = dispPossiveis > 0 ? Math.min(dispGerando / dispPossiveis * 100, 100) : 0;
@@ -2662,12 +2707,14 @@ function renderCard(idx, d, dispGerando, dispPossiveis, pacMedia06_18, ehHistori
     perfLbl.textContent = ehHistorico ? "Perf. média (06–18h)" : "Performance de potência";
   }
 
-  // Corpo expandido: grupos MPPT com suas 2 strings
+  // Corpo expandido: grupos MPPT com as strings de cada um
+  // (2 por MPPT nos Chint, 1 por MPPT no Canadian — segue NUM_STR/NUM_MPPT)
+  const strPorMppt = Math.max(1, Math.round(NUM_STR / NUM_MPPT));
   const mpptHtml = d.mppt.map((mppt, m) => {
-    const pvA = d.strings[m * 2];
-    const pvB = d.strings[m * 2 + 1];
+    const pvs = [];
+    for (let k = 0; k < strPorMppt; k++) pvs.push(d.strings[m * strPorMppt + k]);
 
-    const strHtml = [pvA, pvB].map(pv => {
+    const strHtml = pvs.map(pv => {
       if (!pv) return "";
       const cls = pv.i < -0.05 ? "str-row negativa" : pv.i > 0.5 ? "str-row ativa" : "str-row";
       return `
