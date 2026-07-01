@@ -8,7 +8,8 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <style>
     /* ═══════════════════════════════════════════════════════════════════
-       APOLO SOLAR — DASHBOARD V61
+       APOLO SOLAR — DASHBOARD
+       Versão com Inversores Chint e Canadian. Huawei ainda em construção
        Executive BI redesign. Preserves every ID and class hook used by
        the original JS — only the visual layer changed.
        Type: IBM Plex Sans (UI) + IBM Plex Mono (numeric/labels)
@@ -1533,7 +1534,7 @@ function getApiUrl() {
 // ===== PREVISAO DO TEMPO (Open-Meteo) =====
 const USINAS_COORDS = {
   pk:       { lat: -21.10, lon: -41.04, nome: "Pres. Kennedy / ES", topbar: "Presidente Kennedy", inversores: 8 },
-  linhares: { lat: -19.39, lon: -40.07, nome: "Linhares / ES",      topbar: "Linhares",            inversores: 0 },
+  linhares: { lat: -19.39, lon: -40.07, nome: "Linhares / ES",      topbar: "Linhares",            inversores: 1 },
   ibiracu:  { lat: -19.83, lon: -40.37, nome: "Ibiraçu / ES",       topbar: "Ibiraçu",             inversores: 2 },
 };
 
@@ -1726,10 +1727,17 @@ const USINAS_CONFIG = {
       "Inversor 5","Inversor 6","Inversor 7","Inversor 8"
     ],
     csvDirBd:   "/Banco%20de%20Dados",
+    numMppt: 12, numStr: 24,          // Chint: 2 strings por MPPT
   },
   ibiracu: {
     nomes: ["Inversor 1","Inversor 2"],
     csvDirBd:   "/Banco%20de%20Dados/ibiracu",
+    numMppt: 12, numStr: 24,          // Chint: 2 strings por MPPT
+  },
+  linhares: {
+    nomes: ["Inversor 1"],
+    csvDirBd:   "/Banco%20de%20Dados/linhares",
+    numMppt: 12, numStr: 12,          // Canadian: 1 string por MPPT
   },
 };
 
@@ -1738,8 +1746,10 @@ let CSV_DIR_BD   = USINAS_CONFIG.pk.csvDirBd;
 
 const INTERVALO = 240;   // V72: 4 minutos (a Chint publica a cada 5 min)
 const LARGURA_PT = 55;
-const NUM_MPPT  = 12;
-const NUM_STR   = 24;
+// Topologia por usina (Chint = 12/24, Canadian/Linhares = 12/12).
+// Sao 'let' porque mudam ao trocar de usina (ver trocarUsina).
+let NUM_MPPT  = USINAS_CONFIG[USINA_ATIVA].numMppt;
+let NUM_STR   = USINAS_CONFIG[USINA_ATIVA].numStr;
 
 let NOMES = USINAS_CONFIG[USINA_ATIVA].nomes.slice();
 
@@ -2126,7 +2136,7 @@ async function buscarDiaAPI(dataStr) {
     }
     for (let s = 0; s < NUM_STR; s++) {
       if (!strArr[s]) {
-        const mpptN = Math.floor(s / 2);
+        const mpptN = Math.floor(s / Math.max(1, NUM_STR / NUM_MPPT));
         strArr[s] = { n: s + 1, i: 0, p: 0,
                       v: mpptArr[mpptN] ? mpptArr[mpptN].v : 0,
                       mppt: mpptN + 1 };
@@ -3845,23 +3855,12 @@ function trocarUsina(slug) {
     el.classList.toggle('ativo', el.dataset.usina === slug);
   });
 
-  // ── 2. Linhares ainda nao tem dados: mostra overlay "em breve" ──────
+  // ── 2. Todas as usinas atuais tem dados: garante painel visivel ─────
+  //    (o overlay "em breve" fica disponivel para usinas futuras sem dados)
   const overlay  = document.getElementById('overlay-em-breve');
   const conteudo = document.getElementById('painel-conteudo');
-  if (slug === 'linhares') {
-    if (overlay) {
-      const titulo = document.getElementById('em-breve-titulo');
-      if (titulo) titulo.textContent = 'Linhares';
-      overlay.style.display = '';
-    }
-    if (conteudo) conteudo.style.display = 'none';
-    // Pausa o countdown enquanto nao tem usina real
-    try { clearInterval(countdownTimer); } catch(e) {}
-    return;
-  } else {
-    if (overlay)  overlay.style.display = 'none';
-    if (conteudo) conteudo.style.display = '';
-  }
+  if (overlay)  overlay.style.display = 'none';
+  if (conteudo) conteudo.style.display = '';
 
   // ── 3. Verifica se a usina existe em USINAS_CONFIG ──────────────────
   const cfgUsina = USINAS_CONFIG[slug];
@@ -3877,6 +3876,8 @@ function trocarUsina(slug) {
   USINA_ATIVA  = slug;
   NOMES        = cfgUsina.nomes.slice();
   CSV_DIR_BD   = cfgUsina.csvDirBd;
+  NUM_MPPT     = cfgUsina.numMppt;
+  NUM_STR      = cfgUsina.numStr;
 
   // ── 5. Atualiza topbar (titulo + numero de inversores) ──────────────
   const cfgCoord = USINAS_COORDS[slug];
