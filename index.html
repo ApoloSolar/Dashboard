@@ -3220,30 +3220,36 @@ function _renderKpiPvsyst(esperado, realizado, rotuloPeriodo) {
   }
 }
 
-// Calcula { esperado, realizado, rotulo } da comparação PVsyst de um MÊS
-// a partir das linhas do mês (que trazem .pvsyst). Se o mês está em curso,
-// pró-rateia o previsto e soma o realizado só até hoje (comparação justa).
+// Calcula { esperado, realizado, rotulo } da comparação PVsyst de um MÊS.
+// Compara a PROJEÇÃO da geração do mês com o previsto CHEIO do PVsyst
+// (mês base × depreciação do ano — já vem calculado em pvsyst.esperado_kwh):
+//   • Mês em curso: projeta o mês = (média de energia dos dias que geraram)
+//     × (dias do mês). Assim 3 dias reais não são comparados a 3/31 do previsto.
+//   • Mês fechado: usa a geração real total do mês.
 // Usado pelos três modos: diário, mensal e anual.
 function _calcPvsystMes(ano, mes, linhas) {
   if (!linhas || !linhas.pvsyst) return null;
+  const esperado = linhas.pvsyst.esperado_kwh;          // previsto CHEIO do mês
+  if (!esperado || esperado <= 0) return null;
+
   const chaveMes     = String(ano).padStart(4, "0") + "-" + String(mes).padStart(2, "0");
-  const hojeIso      = hojeStr();
-  const ehMesEmCurso = chaveMes === hojeIso.slice(0, 7);
-  const diaCorte     = ehMesEmCurso ? parseInt(hojeIso.slice(8, 10)) : 31;
-  let realizado = 0;
-  linhas.forEach(l => {
-    if (parseInt(l.data.slice(8, 10)) > diaCorte) return;
-    realizado += l.energia_kwh;
-  });
-  let esperado = linhas.pvsyst.esperado_kwh, rotulo;
+  const ehMesEmCurso = chaveMes === hojeStr().slice(0, 7);
+  const diasNoMes    = new Date(ano, mes, 0).getDate();
+
   if (ehMesEmCurso) {
-    const diasNoMes = new Date(ano, mes, 0).getDate();
-    esperado = esperado * (diaCorte / diasNoMes);
-    rotulo   = "mês até dia " + diaCorte;
-  } else {
-    rotulo = "mês fechado";
+    // Média dos dias que já geraram → projeta o mês inteiro
+    let soma = 0, nDias = 0;
+    linhas.forEach(l => { if (l.energia_kwh > 0) { soma += l.energia_kwh; nDias++; } });
+    if (nDias === 0) return { esperado, realizado: 0, rotulo: "sem geração no mês" };
+    const projecao = (soma / nDias) * diasNoMes;
+    return { esperado, realizado: projecao,
+             rotulo: "projeção do mês (" + nDias + (nDias > 1 ? " dias" : " dia") + ")" };
   }
-  return { esperado, realizado, rotulo };
+
+  // Mês fechado: geração real total do mês
+  let total = 0;
+  linhas.forEach(l => { total += l.energia_kwh; });
+  return { esperado, realizado: total, rotulo: "mês fechado" };
 }
 
 // Modo diário: o card reflete o MÊS da data selecionada (geração acumulada
