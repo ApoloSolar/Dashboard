@@ -1401,11 +1401,12 @@
       <div class="kpi-sub">com geração positiva</div>
       <svg class="kpi-watermark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12 q 2 -7 4 0 t 4 0 t 4 0 t 4 0"/></svg>
     </div>
-    <div class="kpi">
-      <div class="kpi-label">Frequência</div>
-      <div><span class="kpi-value" id="s-freq">--</span><span class="kpi-unit">Hz</span></div>
-      <div class="kpi-sub">média dos inversores</div>
-      <svg class="kpi-watermark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="2,16 6,16 6,8 10,8 10,16 14,16 14,8 18,8 18,16 22,16"/></svg>
+    <!-- Geração realizada vs prevista pelo PVsyst (só nos modos Mensal/Anual) -->
+    <div class="kpi" id="kpi-pvsyst" style="display:none">
+      <div class="kpi-label">Geração vs PVsyst</div>
+      <div><span class="kpi-value" id="s-pvsyst">--</span><span class="kpi-unit">%</span></div>
+      <div class="kpi-sub" id="s-pvsyst-sub">realizado vs previsto</div>
+      <svg class="kpi-watermark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>
     </div>
     <div class="kpi">
       <div class="kpi-label">Última leitura</div>
@@ -3014,6 +3015,10 @@ async function atualizarDiario() {
       renderAlarmes(lista, dataSelecionada);
     });
 
+    // KPI Geração vs PVsyst: no modo diário reflete o MÊS da data selecionada
+    // (geração acumulada do mês vs previsto). Assíncrono — não bloqueia.
+    _atualizarPvsystDoDia();
+
   } catch(e) {
     console.error(e);
     dotG.className  = "dot-g err";
@@ -3178,7 +3183,7 @@ async function fetchResumoMesAPI(ano, mes) {
   });
   const temDisp = Object.keys(dispPorData).length > 0;
 
-  return dados.dias.map(d => ({
+  const linhas = dados.dias.map(d => ({
     data:         d.data,
     energia_kwh:  d.energia_kwh || 0,
     pac_medio:    d.pac_medio_kw || 0,
@@ -3188,6 +3193,70 @@ async function fetchResumoMesAPI(ano, mes) {
     status:       (d.energia_kwh > 0) ? "OK" : "SEM_DADOS",
     disp_por_inv: temDisp ? (dispPorData[d.data] || {}) : null,
   }));
+  // Anexa o bloco de comparação com o PVsyst (vem em resumo.pvsyst) ao
+  // próprio array, para alimentar o KPI de performance nos modos mensal/anual.
+  linhas.pvsyst = (dados.resumo && dados.resumo.pvsyst) ? dados.resumo.pvsyst : null;
+  return linhas;
+}
+
+// Renderiza a comparação "Geração vs PVsyst" (diário, mensal ou anual).
+// esperado=null oculta o card — caso de usina sem previsão cadastrada.
+function _renderKpiPvsyst(esperado, realizado, rotuloPeriodo) {
+  const card = $("kpi-pvsyst");
+  if (!card) return;
+  if (!esperado || esperado <= 0) { card.style.display = "none"; return; }
+  card.style.display = "";
+  const pct = (realizado / esperado) * 100;
+  const val = $("s-pvsyst"), sub = $("s-pvsyst-sub");
+  if (val) {
+    val.textContent  = pct.toFixed(0);
+    // vermelho < 85% · âmbar 85–100% · verde ≥ 100%
+    val.style.color = pct >= 100 ? "var(--green)" : pct >= 85 ? "var(--amber)" : "var(--red)";
+  }
+  if (sub) {
+    const fmt = n => Math.round(n).toLocaleString("pt-BR");
+    sub.textContent = fmt(realizado) + " / " + fmt(esperado) + " kWh" +
+                      (rotuloPeriodo ? " · " + rotuloPeriodo : "");
+  }
+}
+
+// Calcula { esperado, realizado, rotulo } da comparação PVsyst de um MÊS
+// a partir das linhas do mês (que trazem .pvsyst). Se o mês está em curso,
+// pró-rateia o previsto e soma o realizado só até hoje (comparação justa).
+// Usado pelos três modos: diário, mensal e anual.
+function _calcPvsystMes(ano, mes, linhas) {
+  if (!linhas || !linhas.pvsyst) return null;
+  const chaveMes     = String(ano).padStart(4, "0") + "-" + String(mes).padStart(2, "0");
+  const hojeIso      = hojeStr();
+  const ehMesEmCurso = chaveMes === hojeIso.slice(0, 7);
+  const diaCorte     = ehMesEmCurso ? parseInt(hojeIso.slice(8, 10)) : 31;
+  let realizado = 0;
+  linhas.forEach(l => {
+    if (parseInt(l.data.slice(8, 10)) > diaCorte) return;
+    realizado += l.energia_kwh;
+  });
+  let esperado = linhas.pvsyst.esperado_kwh, rotulo;
+  if (ehMesEmCurso) {
+    const diasNoMes = new Date(ano, mes, 0).getDate();
+    esperado = esperado * (diaCorte / diasNoMes);
+    rotulo   = "mês até dia " + diaCorte;
+  } else {
+    rotulo = "mês fechado";
+  }
+  return { esperado, realizado, rotulo };
+}
+
+// Modo diário: o card reflete o MÊS da data selecionada (geração acumulada
+// do mês vs previsto do PVsyst). Busca o resumo do mês e renderiza o KPI.
+async function _atualizarPvsystDoDia() {
+  try {
+    const [a, m] = dataSelecionada.split("-").map(Number);
+    const linhas = await fetchResumoMesAPI(a, m);
+    const c = _calcPvsystMes(a, m, linhas);
+    _renderKpiPvsyst(c ? c.esperado : null, c ? c.realizado : 0, c ? c.rotulo : "");
+  } catch (e) {
+    _renderKpiPvsyst(null);
+  }
 }
 
 function _zerarKpisInstantaneos() {
@@ -3577,6 +3646,10 @@ async function atualizarMensal() {
     if (sDiaDelta) sDiaDelta.style.visibility = "";
     _setDeltaMes("s-dia-delta", "s-dia-sub", energiaTotal, energiaAnt, rotuloAnt);
 
+    // KPI Geração vs PVsyst (usa o helper compartilhado — pró-rateia mês em curso)
+    const cpv = _calcPvsystMes(ano, mes, linhas);
+    _renderKpiPvsyst(cpv ? cpv.esperado : null, cpv ? cpv.realizado : 0, cpv ? cpv.rotulo : "");
+
     _zerarKpisInstantaneos();
 
     // KPI tempo: sparkline de insolação
@@ -3728,6 +3801,16 @@ async function atualizarAnual() {
     if (sDiaDelta) sDiaDelta.style.visibility = "hidden";
     const sDiaSub = $("s-dia-sub");
     if (sDiaSub) sDiaSub.textContent = "\u00a0";
+
+    // KPI Geração vs PVsyst: soma previsto e realizado mês a mês (pró-rateados
+    // pelo helper), o que dá a comparação proporcional correta do ano em curso.
+    let espAno = 0, realAno = 0, temPvsyst = false;
+    todos.forEach(t => {
+      const c = _calcPvsystMes(ano, t.mes, t.linhas);
+      if (c) { espAno += c.esperado; realAno += c.realizado; temPvsyst = true; }
+    });
+    _renderKpiPvsyst(temPvsyst ? espAno : null, realAno,
+                     (ano === hojeAno) ? "ano até " + NOMES_MES[mesLimite] : "ano fechado");
 
     _zerarKpisInstantaneos();
     _renderSparklineInsolacao(linhasAno);
