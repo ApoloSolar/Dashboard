@@ -1756,7 +1756,7 @@ const USINAS_CONFIG = {
   linhares: {
     nomes: ["Inversor 1"],
     csvDirBd:   "/Banco%20de%20Dados/linhares",
-    numMppt: 12, numStr: 12,          // Canadian: 1 string por MPPT
+    numMppt: 12, numStr: 24,          // Canadian: 2 strings por MPPT
   },
 };
 
@@ -1765,7 +1765,7 @@ let CSV_DIR_BD   = USINAS_CONFIG.pk.csvDirBd;
 
 const INTERVALO = 240;   // V72: 4 minutos (a Chint publica a cada 5 min)
 const LARGURA_PT = 55;
-// Topologia por usina (Chint = 12/24, Canadian/Linhares = 12/12).
+// Topologia por usina (Chint = 12/24, Canadian/Linhares = 12/24).
 // Sao 'let' porque mudam ao trocar de usina (ver trocarUsina).
 let NUM_MPPT  = USINAS_CONFIG[USINA_ATIVA].numMppt;
 let NUM_STR   = USINAS_CONFIG[USINA_ATIVA].numStr;
