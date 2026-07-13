@@ -1180,6 +1180,112 @@
       .pi-item { min-width: 140px; }
     }
 
+
+    /* ═══════════════════════════════════════════════════════════════════
+       VISÃO GERAL — aba-resumo de todas as usinas
+       Reaproveita .kpi / .summary-grid / .chart-card / .topbar.
+       ═══════════════════════════════════════════════════════════════════ */
+
+    /* Item de "Visão Geral" no topo da sidebar, com separador */
+    .sidebar-nav-top { display:flex; flex-direction:column; padding: 6px 8px 0; gap:2px; }
+    .sidebar-item.geral .ico-geral {
+      width:16px; height:16px; flex-shrink:0; color: var(--text3);
+      transition: color .15s;
+    }
+    .sidebar-item.geral:hover .ico-geral { color: var(--text); }
+    .sidebar-item.geral.ativo .ico-geral { color: var(--amber); }
+    .sidebar-sep {
+      height:1px; margin: 8px 12px 4px;
+      background: var(--border-soft);
+    }
+    @media (max-width: 760px) { .sidebar-sep { display:none; } .sidebar-nav-top { padding: 4px 8px; } }
+
+    /* KPI de geração da semana / mês herdam cores próprias */
+    .kpi:has(#g-semana) .kpi-watermark { color: var(--accent); opacity:.14; }
+    .kpi:has(#g-mes) .kpi-watermark    { color: var(--amber); opacity:.16; }
+
+    /* Strip "por usina" — cartões compactos de cada usina */
+    .geral-plants {
+      display:grid; grid-template-columns: repeat(3, minmax(0,1fr));
+      gap:14px; margin: 4px 0 24px;
+    }
+    @media (max-width: 820px) { .geral-plants { grid-template-columns: 1fr; } }
+
+    .gp-card {
+      background: linear-gradient(180deg, var(--bg2) 0%, #0f131a 100%);
+      border:1px solid var(--border); border-radius: var(--r-md);
+      padding: 16px 18px; position:relative; overflow:hidden;
+      box-shadow: var(--shadow-sm);
+      transition: border-color .18s, transform .18s, box-shadow .18s;
+    }
+    .gp-card:hover { border-color: var(--border-strong); box-shadow: var(--shadow-md); transform: translateY(-1px); }
+    .gp-card.sem-dados { opacity:.55; }
+    .gp-head {
+      display:flex; align-items:center; justify-content:space-between;
+      gap:10px; margin-bottom:14px;
+    }
+    .gp-name {
+      font-size:14px; font-weight:600; color:var(--text);
+      letter-spacing:-0.01em; display:flex; align-items:center; gap:8px;
+    }
+    .gp-name .gp-dot {
+      width:8px; height:8px; border-radius:50%; background: var(--text4);
+      box-shadow: 0 0 0 3px rgba(255,255,255,.02);
+    }
+    .gp-name .gp-dot.ok  { background: var(--green); box-shadow: 0 0 8px rgba(63,185,80,.5); }
+    .gp-name .gp-dot.err { background: var(--red); }
+    .gp-pac {
+      font-family:'IBM Plex Mono', monospace; font-size:12px;
+      color: var(--amber); font-weight:500; white-space:nowrap;
+    }
+    .gp-metrics { display:grid; grid-template-columns: repeat(3,1fr); gap:10px; }
+    .gp-metric { display:flex; flex-direction:column; gap:3px; min-width:0; }
+    .gp-metric-lbl {
+      font-family:'IBM Plex Mono', monospace; font-size:9px; font-weight:500;
+      text-transform:uppercase; letter-spacing:.12em; color:var(--text4);
+      white-space:nowrap;
+    }
+    .gp-metric-val {
+      font-size:16px; font-weight:500; color:var(--text);
+      font-variant-numeric:tabular-nums; letter-spacing:-0.02em;
+      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    }
+    .gp-metric-val small { font-size:10px; color:var(--text3); font-weight:400; margin-left:2px; }
+    .gp-metric-val.good { color: var(--green); }
+    .gp-metric-val.warn { color: var(--amber); }
+    .gp-metric-val.bad  { color: var(--red); }
+    .gp-card-link { position:absolute; inset:0; cursor:pointer; }
+
+    /* Chips de inversores online por usina, dentro do KPI */
+    .geral-inv-chips {
+      display:flex; flex-wrap:wrap; gap:5px; margin-top:6px;
+    }
+    .geral-inv-chip {
+      font-family:'IBM Plex Mono', monospace; font-size:9.5px; font-weight:500;
+      padding:2px 7px; border-radius: var(--r-pill);
+      border:1px solid var(--border); color: var(--text3);
+      background: var(--bg3); white-space:nowrap;
+    }
+    .geral-inv-chip.full { color: var(--green); border-color: rgba(63,185,80,.28); background: var(--green-dim); }
+    .geral-inv-chip.part { color: var(--amber); border-color: var(--amber-line); background: var(--amber-dim); }
+    .geral-inv-chip.none { color: var(--red); border-color: rgba(248,81,73,.28); background: var(--red-dim); }
+
+    /* KPI online precisa de espaço vertical extra p/ os chips → auto height */
+    .kpi.kpi-online { height:auto; min-height:112px; }
+
+    /* Legenda do gráfico agregado (multi-usina) */
+    .geral-chart-legend {
+      display:flex; flex-wrap:wrap; gap:16px; margin-top:12px;
+      font-size:11px; color:var(--text2);
+    }
+    .geral-chart-legend .lg { display:flex; align-items:center; gap:7px; }
+    .geral-chart-legend .lg-line { width:16px; height:0; border-top:2px solid; border-radius:2px; }
+    .geral-chart-legend .lg-line.total { height:0; border-top-width:3px; }
+
+    .geral-loading {
+      padding: 40px; text-align:center; color: var(--text3);
+      font-size: 13px;
+    }
   </style>
 </head>
 <body>
@@ -1247,9 +1353,16 @@
   </text>
   <text x="1550" y="630" font-family="Quicksand, sans-serif" font-weight="500" font-size="65" letter-spacing="14" fill="#8b8b8d" text-anchor="end">ENERGIA RENOVÁVEL</text>
 </svg></div>
+  <div class="sidebar-nav-top">
+    <div class="sidebar-item geral ativo" data-usina="geral" onclick="abrirVisaoGeral()">
+      <svg class="ico-geral" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+      <span class="label-usina">Visão Geral</span>
+    </div>
+  </div>
+  <div class="sidebar-sep"></div>
   <div class="sidebar-title">Usinas</div>
   <nav class="sidebar-nav">
-    <div class="sidebar-item ativo" data-usina="pk" onclick="trocarUsina('pk')">
+    <div class="sidebar-item" data-usina="pk" onclick="trocarUsina('pk')">
       <span class="dot-st"></span>
       <span class="label-usina">Presidente Kennedy</span>
     </div>
@@ -1266,8 +1379,97 @@
 
 <div class="conteudo">
 
+<!-- ═══════════════════════════════════════════════════════════════════
+     PAINEL VISÃO GERAL — resumo consolidado das 3 usinas (página inicial)
+     ═══════════════════════════════════════════════════════════════════ -->
+<div id="painel-geral">
+  <div class="topbar">
+    <div class="logo">Visão Geral &mdash; <span id="geral-num-usinas">3</span> Usinas</div>
+    <div class="top-right">
+      <span class="auto-pill" id="geral-auto-pill" title="Atualização automática a cada 4 minutos">
+        <span class="auto-dot"></span>
+        <span id="geral-auto-status">ao vivo</span>
+      </span>
+      <button class="btn" onclick="carregarVisaoGeral()">Atualizar agora</button>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="summary-grid">
+      <!-- Geração do dia (soma das usinas) -->
+      <div class="kpi">
+        <div class="kpi-label">Geração do dia</div>
+        <div><span class="kpi-value" id="g-dia">--</span><span class="kpi-unit" id="g-dia-u">kWh</span></div>
+        <div class="kpi-sub" id="g-dia-sub">soma das usinas &middot; hoje</div>
+        <svg class="kpi-watermark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="17" height="10" rx="2"/><path d="M21 11v2"/><path d="M6 10v4M10 10v4M14 10v4"/></svg>
+      </div>
+      <!-- Geração da semana -->
+      <div class="kpi">
+        <div class="kpi-label">Geração da semana</div>
+        <div><span class="kpi-value" id="g-semana">--</span><span class="kpi-unit" id="g-semana-u">kWh</span></div>
+        <div class="kpi-sub" id="g-semana-sub">últimos 7 dias</div>
+        <svg class="kpi-watermark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/></svg>
+      </div>
+      <!-- Geração do mês -->
+      <div class="kpi">
+        <div class="kpi-label">Geração do mês</div>
+        <div><span class="kpi-value" id="g-mes">--</span><span class="kpi-unit" id="g-mes-u">kWh</span></div>
+        <div class="kpi-sub" id="g-mes-sub">mês corrente</div>
+        <svg class="kpi-watermark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>
+      </div>
+      <!-- Inversores online (fleet) -->
+      <div class="kpi kpi-online">
+        <div class="kpi-label">Inversores online</div>
+        <div><span class="kpi-value" id="g-inv">--</span><span class="kpi-unit" id="g-inv-total">/ --</span></div>
+        <div class="geral-inv-chips" id="g-inv-chips"></div>
+        <svg class="kpi-watermark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12 q 2 -7 4 0 t 4 0 t 4 0 t 4 0"/></svg>
+      </div>
+      <!-- Disponibilidade (fleet, 06-18h) -->
+      <div class="kpi">
+        <div class="kpi-label">Disponibilidade</div>
+        <div><span class="kpi-value" id="g-disp">--</span><span class="kpi-unit">%</span></div>
+        <div class="kpi-sub" id="g-disp-sub">frota &middot; 06:00–18:00 hoje</div>
+        <svg class="kpi-watermark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2a10 10 0 1 0 10 10"/><polyline points="8,12 11,15 16,9"/></svg>
+      </div>
+      <!-- Geração vs PVsyst (agregado, ignora usinas sem pvsyst) -->
+      <div class="kpi" id="g-kpi-pvsyst">
+        <div class="kpi-label">Geração vs PVsyst</div>
+        <div><span class="kpi-value" id="g-pvsyst">--</span><span class="kpi-unit">%</span></div>
+        <div class="kpi-sub" id="g-pvsyst-sub">realizado vs previsto</div>
+        <svg class="kpi-watermark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>
+      </div>
+    </div>
+
+    <!-- Gráfico de potência somada (todas as usinas) -->
+    <div class="charts-row" style="grid-template-columns:1fr">
+      <div class="chart-card">
+        <div class="chart-card-title">
+          <span>Potência das usinas</span>
+          <span id="geral-chart-pico" style="font-weight:400;color:var(--amber)"></span>
+        </div>
+        <div class="chart-subtitle">Potência total (kW) ao longo do dia &mdash; soma das 3 usinas + curva de cada usina</div>
+        <div class="chart-scroll-wrap">
+          <div class="chart-inner" style="min-width:100%">
+            <canvas id="geral-chart-total"></canvas>
+          </div>
+        </div>
+        <div class="geral-chart-legend" id="geral-chart-legend"></div>
+      </div>
+    </div>
+
+    <!-- Detalhamento por usina -->
+    <div class="chart-card-title" style="margin:20px 0 12px"><span>Por usina</span></div>
+    <div class="geral-plants" id="geral-plants">
+      <div class="geral-loading">Carregando usinas...</div>
+    </div>
+
+    <div class="footer" id="geral-footer">nunca atualizado</div>
+  </div>
+</div>
+<!-- /painel-geral -->
+
 <!-- Conteudo principal: alimentado pela usina ativa (PK ou Ibiracu) -->
-<div id="painel-conteudo">
+<div id="painel-conteudo" style="display:none">
 
 <div class="topbar">
   <div class="logo"><span id="topbar-usina">Presidente Kennedy</span> &mdash; <span id="topbar-inversores">8</span> Inversores</div>
@@ -3946,6 +4148,9 @@ dp.addEventListener("change", () => {
 // esperar o ciclo de 4 min), garantindo que a tela nunca fique presa no
 // dia anterior.
 setInterval(() => {
+  // Enquanto a Visão Geral está aberta, o painel por-usina fica escondido e
+  // sem ciclo próprio — a própria Visão Geral se atualiza e já usa "hoje".
+  if (typeof VISAO_GERAL !== "undefined" && VISAO_GERAL) return;
   try { if (rolarDiaSeVirou()) atualizar(); } catch(e) {}
 }, 30 * 1000);
 
@@ -3976,8 +4181,427 @@ yp.addEventListener("change", () => {
   atualizar();
 });
 
-atualizar();
+// (A Visão Geral é aberta como página inicial no fim deste script — ver
+//  chamada abrirVisaoGeral() depois que as variáveis de estado existirem.)
 
+
+// ═══════════════════════════════════════════════════════════════════════
+// VISÃO GERAL — resumo consolidado das 3 usinas (página inicial)
+// Busca em paralelo os endpoints de cada usina, agrega e renderiza.
+// Não altera nada do painel por-usina; roda em cima dos mesmos endpoints.
+// ═══════════════════════════════════════════════════════════════════════
+let VISAO_GERAL = true;      // true = aba "Visão Geral" aberta (landing)
+let geralChart  = null;
+let geralTimer  = null;
+
+// Ordem de exibição (segue a sidebar). Só entram as usinas configuradas.
+const GERAL_ORDEM = ["pk", "linhares", "ibiracu"];
+const GERAL_CORES = { pk: "#FF9B22", linhares: "#58a6ff", ibiracu: "#3fb950" };
+const GERAL_SIGLA = { pk: "PK", linhares: "LIN", ibiracu: "IBI" };
+function _geralSigla(slug) { return GERAL_SIGLA[slug] || (slug || "").slice(0,3).toUpperCase(); }
+
+function _geralSlugsAtivos() {
+  return GERAL_ORDEM.filter(s => USINAS_CONFIG[s]);
+}
+
+// ── Busca agregada de UMA usina (dia + canais + curva-inv + mensal) ──────
+async function _geralFetchUsina(slug, dataStr, ano, mes) {
+  const base  = getApiUrl();
+  const q     = "?usina=" + encodeURIComponent(slug);
+  const cfg   = USINAS_CONFIG[slug] || {};
+  const coord = USINAS_COORDS[slug] || {};
+
+  const out = {
+    slug,
+    nome: coord.topbar || slug,
+    invTotal: cfg.nomes ? cfg.nomes.length : (coord.inversores || 0),
+    invOnline: 0,
+    geracaoDia: 0,
+    pacAgora: 0,
+    curva: {},            // "HH:MM" -> pac_total somado
+    dispGerando: 0,
+    dispPossiveis: 0,
+    energiaMes: 0,
+    energiaPorData: {},   // "YYYY-MM-DD" -> kWh
+    pvsyst: null,         // { esperado, realizado } ou null
+    temDados: false,
+  };
+
+  // /dia -> curva total da usina
+  const pDia = fetch(base + "/dia/" + dataStr + q)
+    .then(r => r.ok ? r.json() : null)
+    .then(d => {
+      if (!d || !Array.isArray(d.curva)) return;
+      for (const c of d.curva) {
+        const hhmm = (c.data_hora || "").slice(11, 16);
+        if (!hhmm) continue;
+        out.curva[hhmm] = (out.curva[hhmm] || 0) + (c.pac_total || 0);
+        out.temDados = true;
+      }
+    }).catch(() => {});
+
+  // /dia/canais -> online + geração do dia + potência instantânea
+  const pCanais = fetch(base + "/dia/" + dataStr + "/canais" + q)
+    .then(r => r.ok ? r.json() : null)
+    .then(d => {
+      if (!d || !Array.isArray(d.inversores)) return;
+      for (const inv of d.inversores) {
+        out.geracaoDia += inv.dyield_kwh || 0;
+        out.pacAgora   += inv.pac_kw || 0;
+        if ((inv.pac_kw || 0) > 0 && (inv.status || "") === "ONLINE") out.invOnline++;
+      }
+    }).catch(() => {});
+
+  // /dia/curva-inversores -> disponibilidade 06-18h (mesma regra do painel)
+  const pCurva = fetch(base + "/dia/" + dataStr + "/curva-inversores" + q)
+    .then(r => r.ok ? r.json() : null)
+    .then(d => {
+      if (!d || !Array.isArray(d.inversores)) return;
+      const HI = 6, HF = 18;
+      let ger = 0, poss = 0;
+      for (const inv of d.inversores) {
+        let ultimaMin = null, gerando = 0;
+        for (const p of (inv.serie || [])) {
+          const hhmm = (p.hora || "").slice(11, 16);
+          if (!hhmm) continue;
+          const hh = parseInt(hhmm.slice(0, 2)), mm = parseInt(hhmm.slice(3, 5));
+          if (hh >= HI && hh < HF) {
+            const minAbs = hh * 60 + mm;
+            if (ultimaMin === null || minAbs > ultimaMin) ultimaMin = minAbs;
+            if ((p.pac_kw || 0) > 0) gerando++;
+          }
+        }
+        if (ultimaMin !== null) {
+          const fimMin    = Math.min(ultimaMin, HF * 60 - 5);
+          const possiveis = Math.max(Math.floor((fimMin - HI * 60) / 5) + 1, 1);
+          ger  += Math.min(gerando, possiveis);
+          poss += possiveis;
+        }
+      }
+      out.dispGerando   = ger;
+      out.dispPossiveis = poss;
+    }).catch(() => {});
+
+  // /mensal -> energia do mês, energia por dia (p/ semana) e PVsyst
+  const a = String(ano).padStart(4, "0"), m = String(mes).padStart(2, "0");
+  const pMes = fetch(base + "/mensal/" + a + "-" + m + q)
+    .then(r => r.ok ? r.json() : null)
+    .then(d => {
+      if (!d || !Array.isArray(d.dias)) return;
+      const linhas = [];
+      for (const dd of d.dias) {
+        const e = dd.energia_kwh || 0;
+        out.energiaMes += e;
+        if (dd.data) out.energiaPorData[dd.data] = e;
+        linhas.push({ data: dd.data, energia_kwh: e });
+      }
+      linhas.pvsyst = (d.resumo && d.resumo.pvsyst) ? d.resumo.pvsyst : null;
+      // Reutiliza o cálculo do painel: projeta mês em curso, usa real se fechado
+      out.pvsyst = _calcPvsystMes(ano, mes, linhas);   // { esperado, realizado } | null
+    }).catch(() => {});
+
+  await Promise.all([pDia, pCanais, pCurva, pMes]);
+  return out;
+}
+
+// Energia por dia de um mês (usada só quando a semana cruza a virada do mês)
+async function _geralFetchMesEnergia(slug, ano, mes) {
+  const base = getApiUrl();
+  const q    = "?usina=" + encodeURIComponent(slug);
+  const a    = String(ano).padStart(4, "0"), m = String(mes).padStart(2, "0");
+  const out  = {};
+  try {
+    const r = await fetch(base + "/mensal/" + a + "-" + m + q);
+    if (!r.ok) return out;
+    const d = await r.json();
+    for (const dd of (d.dias || [])) if (dd.data) out[dd.data] = dd.energia_kwh || 0;
+  } catch (e) {}
+  return out;
+}
+
+// ── Orquestra a carga da Visão Geral ─────────────────────────────────────
+async function carregarVisaoGeral() {
+  if (!VISAO_GERAL) return;
+  _geralSetLive(true, "atualizando...");
+
+  const hoje = hojeStr();
+  const [ano, mes, dia] = hoje.split("-").map(Number);
+
+  let plants;
+  try {
+    plants = await Promise.all(
+      _geralSlugsAtivos().map(s => _geralFetchUsina(s, hoje, ano, mes))
+    );
+  } catch (e) {
+    console.error("Visão Geral falhou:", e);
+    _geralSetLive(false, "erro");
+    return;
+  }
+
+  // Semana = últimos 7 dias (hoje .. hoje-6). Se cruzar o mês, busca o anterior.
+  const diasSemana = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(ano, mes - 1, dia - i);
+    diasSemana.push(
+      d.getFullYear() + "-" +
+      String(d.getMonth() + 1).padStart(2, "0") + "-" +
+      String(d.getDate()).padStart(2, "0")
+    );
+  }
+  const precisaMesAnterior = diasSemana.some(ds => ds.slice(0, 7) !== hoje.slice(0, 7));
+  if (precisaMesAnterior) {
+    const prev = new Date(ano, mes - 1, 1); prev.setDate(0); // último dia do mês anterior
+    const pa = prev.getFullYear(), pm = prev.getMonth() + 1;
+    await Promise.all(plants.map(async pl => {
+      const extra = await _geralFetchMesEnergia(pl.slug, pa, pm);
+      Object.assign(pl.energiaPorData, extra);
+    }));
+  }
+
+  _geralRender(plants, diasSemana);
+  _geralSetLive(true, "ao vivo");
+  set("geral-footer", "última atualização: " + new Date().toLocaleTimeString("pt-BR"));
+
+  clearTimeout(geralTimer);
+  if (VISAO_GERAL) geralTimer = setTimeout(carregarVisaoGeral, INTERVALO * 1000);
+}
+
+// Formata kWh -> kWh/MWh automaticamente em dois elementos (valor + unidade)
+function _geralSetEnergia(idV, idU, kwh) {
+  const v = $(idV), u = $(idU);
+  if (Math.abs(kwh) >= 1000) {
+    if (v) v.textContent = fmt(kwh / 1000, 2);
+    if (u) u.textContent = "MWh";
+  } else {
+    if (v) v.textContent = fmt(kwh, 1);
+    if (u) u.textContent = "kWh";
+  }
+}
+
+// ── Render dos agregados ─────────────────────────────────────────────────
+function _geralRender(plants, diasSemana) {
+  let diaTot = 0, mesTot = 0, semTot = 0;
+  let invOn = 0, invTot = 0, gerTot = 0, possTot = 0;
+  let pvEsp = 0, pvReal = 0, nPv = 0;
+
+  for (const pl of plants) {
+    diaTot += pl.geracaoDia;
+    mesTot += pl.energiaMes;
+    for (const ds of diasSemana) semTot += (pl.energiaPorData[ds] || 0);
+    invOn  += pl.invOnline;
+    invTot += pl.invTotal;
+    gerTot  += pl.dispGerando;
+    possTot += pl.dispPossiveis;
+    if (pl.pvsyst && pl.pvsyst.esperado > 0) {
+      pvEsp += pl.pvsyst.esperado; pvReal += pl.pvsyst.realizado; nPv++;
+    }
+  }
+
+  // Cards de geração
+  _geralSetEnergia("g-dia",    "g-dia-u",    diaTot);
+  _geralSetEnergia("g-semana", "g-semana-u", semTot);
+  _geralSetEnergia("g-mes",    "g-mes-u",    mesTot);
+
+  // Inversores online + chips por usina
+  set("g-inv", invOn);
+  set("g-inv-total", "/ " + invTot);
+  const chipsEl = $("g-inv-chips");
+  if (chipsEl) {
+    chipsEl.innerHTML = plants.map(pl => {
+      const cls = (pl.invTotal > 0 && pl.invOnline >= pl.invTotal) ? "full"
+                : pl.invOnline > 0 ? "part" : "none";
+      return '<span class="geral-inv-chip ' + cls + '">' +
+             _geralSigla(pl.slug) + ' ' + pl.invOnline + '/' + pl.invTotal + '</span>';
+    }).join("");
+  }
+
+  // Disponibilidade da frota (06-18h)
+  const dispPct = possTot > 0 ? Math.min(gerTot / possTot * 100, 100) : 0;
+  set("g-disp", possTot > 0 ? dispPct.toFixed(1) : "--");
+  const dEl = $("g-disp");
+  if (dEl) dEl.style.color = possTot > 0 ? perfColor(dispPct) : "";
+
+  // PVsyst agregado (ignora automaticamente usinas sem PVsyst cadastrado)
+  const pvCard = $("g-kpi-pvsyst");
+  if (nPv === 0 || pvEsp <= 0) {
+    if (pvCard) pvCard.style.display = "none";
+  } else {
+    if (pvCard) pvCard.style.display = "";
+    const pct = pvReal / pvEsp * 100;
+    set("g-pvsyst", pct.toFixed(0));
+    const pv = $("g-pvsyst");
+    if (pv) pv.style.color = pct >= 100 ? "var(--green)" : pct >= 85 ? "var(--amber)" : "var(--red)";
+    const incl = plants.filter(p => p.pvsyst && p.pvsyst.esperado > 0)
+                       .map(p => _geralSigla(p.slug)).join(", ");
+    set("g-pvsyst-sub", nPv + " de " + plants.length + " usinas · " + incl);
+  }
+
+  _geralRenderChart(plants);
+  _geralRenderPlants(plants);
+}
+
+// ── Gráfico: potência total somada + curva de cada usina ─────────────────
+function _geralRenderChart(plants) {
+  const cv = $("geral-chart-total");
+  if (!cv || typeof Chart === "undefined") return;
+
+  const idxOf = {};
+  LABELS_DIA.forEach((l, i) => { idxOf[l] = i; });
+
+  const perPlant = plants.map(pl => {
+    const arr = new Array(LABELS_DIA.length).fill(null);
+    for (const hhmm of Object.keys(pl.curva)) {
+      const i = idxOf[hhmm];
+      if (i != null) arr[i] = pl.curva[hhmm];
+    }
+    return { slug: pl.slug, nome: pl.nome, arr };
+  });
+
+  const total = new Array(LABELS_DIA.length).fill(null);
+  for (let i = 0; i < total.length; i++) {
+    let s = 0, any = false;
+    for (const p of perPlant) if (p.arr[i] != null) { s += p.arr[i]; any = true; }
+    total[i] = any ? s : null;
+  }
+
+  // Pico do total
+  let pico = 0, picoHora = "";
+  for (let i = 0; i < total.length; i++) {
+    if (total[i] != null && total[i] > pico) { pico = total[i]; picoHora = LABELS_DIA[i]; }
+  }
+  const picoEl = $("geral-chart-pico");
+  if (picoEl) picoEl.textContent = pico > 0
+    ? "pico " + (pico >= 1000 ? fmt(pico/1000,2)+" MW" : fmt(pico,1)+" kW") + " às " + picoHora
+    : "";
+
+  const datasets = [{
+    label: "Total", data: total,
+    borderColor: "#FF9B22", borderWidth: 3,
+    pointRadius: 0, pointHoverRadius: 4,
+    fill: true, backgroundColor: "rgba(255,155,34,0.12)",
+    tension: 0.4, cubicInterpolationMode: "monotone", spanGaps: true, order: 0,
+  }].concat(perPlant.map(p => ({
+    label: p.nome, data: p.arr,
+    borderColor: GERAL_CORES[p.slug] || "#8a94a6", borderWidth: 1.4,
+    pointRadius: 0, pointHoverRadius: 3,
+    fill: false, tension: 0.4, cubicInterpolationMode: "monotone", spanGaps: true, order: 1,
+  })));
+
+  if (geralChart) { try { geralChart.destroy(); } catch (e) {} geralChart = null; }
+
+  geralChart = new Chart(cv.getContext("2d"), {
+    type: "line",
+    data: { labels: LABELS_DIA, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: { duration: 300 },
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: "#1c2333", borderColor: "#2a3240", borderWidth: 1,
+          titleColor: "#768390", bodyColor: "#cdd9e5", displayColors: true,
+          callbacks: {
+            title: items => items[0]?.label ?? "",
+            label: c => "  " + c.dataset.label + "   " + (c.parsed.y != null ? c.parsed.y.toFixed(1) : "--") + " kW",
+          },
+        },
+      },
+      scales: {
+        x: { ticks: { font: { size: 10 }, color: "#768390", maxTicksLimit: 12, maxRotation: 0 }, grid: { display: false }, border: { color: "#2a3240" } },
+        y: { min: 0, ticks: { font: { size: 10 }, color: "#768390", callback: v => v.toFixed(0) + " kW" }, grid: { color: "rgba(255,255,255,0.04)" }, border: { color: "#2a3240" } },
+      },
+    },
+  });
+
+  // Legenda customizada
+  const legEl = $("geral-chart-legend");
+  if (legEl) {
+    legEl.innerHTML =
+      '<span class="lg"><span class="lg-line total" style="border-color:#FF9B22"></span>Total das usinas</span>' +
+      perPlant.map(p =>
+        '<span class="lg"><span class="lg-line" style="border-color:' + (GERAL_CORES[p.slug]||"#8a94a6") + '"></span>' + p.nome + '</span>'
+      ).join("");
+  }
+}
+
+// ── Cards "por usina" ────────────────────────────────────────────────────
+function _geralRenderPlants(plants) {
+  const wrap = $("geral-plants");
+  if (!wrap) return;
+
+  wrap.innerHTML = plants.map(pl => {
+    const online = pl.invOnline > 0;
+    const dotCls = online ? "ok" : (pl.temDados ? "err" : "");
+    const dispPct = pl.dispPossiveis > 0
+      ? Math.min(pl.dispGerando / pl.dispPossiveis * 100, 100) : null;
+    const dispCls = dispPct == null ? "" : dispPct >= 80 ? "good" : dispPct >= 50 ? "warn" : "bad";
+    const invCls  = (pl.invTotal > 0 && pl.invOnline >= pl.invTotal) ? "good"
+                  : pl.invOnline > 0 ? "warn" : "bad";
+
+    const dia = pl.geracaoDia;
+    const diaTxt = Math.abs(dia) >= 1000
+      ? fmt(dia/1000,2) + '<small>MWh</small>'
+      : fmt(dia,1) + '<small>kWh</small>';
+    const pacTxt = pl.pacAgora >= 1000
+      ? fmt(pl.pacAgora/1000,2) + " MW"
+      : fmt(pl.pacAgora,1) + " kW";
+
+    return '' +
+      '<div class="gp-card' + (pl.temDados ? '' : ' sem-dados') + '">' +
+        '<div class="gp-card-link" onclick="trocarUsina(\'' + pl.slug + '\')" title="Abrir ' + pl.nome + '"></div>' +
+        '<div class="gp-head">' +
+          '<div class="gp-name"><span class="gp-dot ' + dotCls + '"></span>' + pl.nome + '</div>' +
+          '<div class="gp-pac">' + pacTxt + '</div>' +
+        '</div>' +
+        '<div class="gp-metrics">' +
+          '<div class="gp-metric">' +
+            '<span class="gp-metric-lbl">Geração dia</span>' +
+            '<span class="gp-metric-val">' + diaTxt + '</span>' +
+          '</div>' +
+          '<div class="gp-metric">' +
+            '<span class="gp-metric-lbl">Online</span>' +
+            '<span class="gp-metric-val ' + invCls + '">' + pl.invOnline + '<small>/ ' + pl.invTotal + '</small></span>' +
+          '</div>' +
+          '<div class="gp-metric">' +
+            '<span class="gp-metric-lbl">Dispon.</span>' +
+            '<span class="gp-metric-val ' + dispCls + '">' + (dispPct == null ? '--' : dispPct.toFixed(0) + '<small>%</small>') + '</span>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+  }).join("");
+}
+
+// ── Abrir / fechar a aba ─────────────────────────────────────────────────
+function _geralSetLive(ativo, rotulo) {
+  const pill = $("geral-auto-pill");
+  if (pill) pill.classList.toggle("off", !ativo);
+  const st = $("geral-auto-status");
+  if (st) st.textContent = rotulo || (ativo ? "ao vivo" : "—");
+}
+
+function abrirVisaoGeral() {
+  VISAO_GERAL = true;
+  document.querySelectorAll('.sidebar-item').forEach(el => {
+    el.classList.toggle('ativo', el.dataset.usina === 'geral');
+  });
+  const pg = $("painel-geral"), pc = $("painel-conteudo"), ov = $("overlay-em-breve");
+  if (ov) ov.style.display = 'none';
+  if (pc) pc.style.display = 'none';
+  if (pg) pg.style.display = '';
+  // Pausa o ciclo da usina individual enquanto a Visão Geral está aberta
+  try { clearInterval(countdownTimer); } catch (e) {}
+  try { setAutoLive(false); } catch (e) {}
+  carregarVisaoGeral();
+  try { window.scrollTo(0, 0); } catch (e) {}
+}
+
+function _fecharVisaoGeral() {
+  VISAO_GERAL = false;
+  clearTimeout(geralTimer); geralTimer = null;
+  const pg = $("painel-geral"), pc = $("painel-conteudo");
+  if (pg) pg.style.display = 'none';
+  if (pc) pc.style.display = '';
+}
 
 // ===== TROCA DE ABA / USINAS =====
 // Estrategia "recarrega ao trocar": ao clicar em outra usina na sidebar,
@@ -3986,6 +4610,10 @@ atualizar();
 // paineis vivos em paralelo, custa apenas uma fracao de segundo de
 // re-render ao trocar.
 function trocarUsina(slug) {
+  // ── 0. Se estávamos na Visão Geral, fecha e volta ao painel por-usina ─
+  const _vinhaDoGeral = VISAO_GERAL;
+  if (VISAO_GERAL) _fecharVisaoGeral();
+
   // ── 1. Sidebar: marca aba ativa ─────────────────────────────────────
   document.querySelectorAll('.sidebar-item').forEach(el => {
     el.classList.toggle('ativo', el.dataset.usina === slug);
@@ -4005,8 +4633,16 @@ function trocarUsina(slug) {
     return;
   }
 
-  // Se ja esta na usina pedida, nao faz nada (evita reload desnecessario)
-  if (slug === USINA_ATIVA) return;
+  // Se ja esta na usina pedida, nao faz nada (evita reload desnecessario).
+  // Exceção: se viemos da Visão Geral, o painel estava escondido/sem carga —
+  // então reexibimos e disparamos uma atualização + previsão.
+  if (slug === USINA_ATIVA) {
+    if (_vinhaDoGeral) {
+      try { atualizarPrevisao(slug, dataSelecionada); } catch (e) {}
+      try { atualizar(); } catch (e) {}
+    }
+    return;
+  }
 
   // ── 4. Reescreve estado global pra apontar pra nova usina ───────────
   USINA_ATIVA  = slug;
@@ -4212,6 +4848,12 @@ document.addEventListener('keydown', function(ev) {
     if (wrap) wrap.classList.remove('open');
   }
 });
+
+// ═══════════════════════════════════════════════════════════════════════
+// PÁGINA INICIAL: abre a Visão Geral (todas as variáveis de estado já
+// foram declaradas acima neste ponto — sem risco de temporal dead zone).
+// ═══════════════════════════════════════════════════════════════════════
+abrirVisaoGeral();
 
 </script>
 </body>
