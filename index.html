@@ -1756,7 +1756,7 @@ function getApiUrl() {
 const USINAS_COORDS = {
   pk:       { lat: -21.10, lon: -41.04, nome: "Pres. Kennedy / ES", topbar: "Presidente Kennedy", inversores: 8 },
   linhares: { lat: -19.39, lon: -40.07, nome: "Linhares / ES",      topbar: "Linhares",            inversores: 1 },
-  ibiracu:  { lat: -19.83, lon: -40.37, nome: "Ibiraçu / ES",       topbar: "Ibiraçu",             inversores: 2 },
+  ibiracu:  { lat: -19.83, lon: -40.37, nome: "Ibiraçu / ES",       topbar: "Ibiraçu",             inversores: 10 },
 };
 
 // WMO weather code -> { icone, desc, gravidade }
@@ -1951,9 +1951,18 @@ const USINAS_CONFIG = {
     numMppt: 12, numStr: 24,          // Chint: 2 strings por MPPT
   },
   ibiracu: {
-    nomes: ["Inversor 1","Inversor 2"],
+    // 10 inversores de MARCAS MISTURADAS na mesma pagina:
+    //   Inversor 1-2  = Chint SCH250KTL          (12 MPPT x 2 strings = 24)
+    //   Inversor 3-6  = Huawei, Ibiracu I        (6 MPPT: 4/5/5/4/5/5 = 28)
+    //   Inversor 7-10 = Huawei, Ibiracu III      (6 MPPT: 4/5/5/4/5/5 = 28)
+    // A marca aparece no badge do card (Chint verde / Huawei azul).
+    nomes: ["Inversor 1","Inversor 2","Inversor 3","Inversor 4","Inversor 5",
+            "Inversor 6","Inversor 7","Inversor 8","Inversor 9","Inversor 10"],
     csvDirBd:   "/Banco%20de%20Dados/ibiracu",
-    numMppt: 12, numStr: 24,          // Chint: 2 strings por MPPT
+    // numMppt/numStr aqui sao apenas RESERVA (usados so se a API nao
+    // devolver canais). A topologia real vem por inversor, dos proprios
+    // dados da API — e o que permite Chint e Huawei na mesma pagina.
+    numMppt: 6, numStr: 28,           // maioria: 8 dos 10 sao Huawei
   },
   linhares: {
     nomes: ["Inversor 1"],
@@ -2341,8 +2350,15 @@ async function buscarDiaAPI(dataStr) {
     for (const m of (inv.mppts || [])) {
       mpptArr[m.mppt - 1] = { v: m.tensao_v || 0, i: m.corrente_a || 0 };
     }
-    // garante o tamanho NUM_MPPT
-    for (let m = 0; m < NUM_MPPT; m++) {
+    // TOPOLOGIA POR INVERSOR (nao mais por usina).
+    // A API ja devolve mppts[] e strings[] de CADA inversor, com o campo
+    // 'mppt' em cada string. Entao o tamanho vem do proprio dado — e o que
+    // permite Chint (12 MPPT x 2 strings = 24) e Huawei (6 MPPT com
+    // 4/5/5/4/5/5 = 28) convivendo na MESMA pagina. NUM_MPPT/NUM_STR ficam
+    // so como reserva, para o caso de a API nao trazer canais.
+    const nMppt = (inv.mppts || []).reduce((a, m) => Math.max(a, m.mppt || 0), 0)
+                  || NUM_MPPT;
+    for (let m = 0; m < nMppt; m++) {
       if (!mpptArr[m]) mpptArr[m] = { v: 0, i: 0 };
     }
 
@@ -2355,9 +2371,12 @@ async function buscarDiaAPI(dataStr) {
         v: mpptPai.v || 0, mppt: s.mppt,
       };
     }
-    for (let s = 0; s < NUM_STR; s++) {
+    const nStr = (inv.strings || []).reduce((a, s) => Math.max(a, s.string_num || 0), 0)
+                 || NUM_STR;
+    for (let s = 0; s < nStr; s++) {
       if (!strArr[s]) {
-        const mpptN = Math.floor(s / Math.max(1, NUM_STR / NUM_MPPT));
+        const porMppt = Math.max(1, Math.round(nStr / Math.max(1, nMppt)));
+        const mpptN = Math.min(nMppt - 1, Math.floor(s / porMppt));
         strArr[s] = { n: s + 1, i: 0, p: 0,
                       v: mpptArr[mpptN] ? mpptArr[mpptN].v : 0,
                       mppt: mpptN + 1 };
@@ -2910,12 +2929,13 @@ function renderCard(idx, d, dispGerando, dispPossiveis, pacMedia06_18, ehHistori
     perfLbl.textContent = ehHistorico ? "Perf. média (06–18h)" : "Performance de potência";
   }
 
-  // Corpo expandido: grupos MPPT com as strings de cada um
-  // (2 por MPPT nos Chint, 1 por MPPT no Canadian — segue NUM_STR/NUM_MPPT)
-  const strPorMppt = Math.max(1, Math.round(NUM_STR / NUM_MPPT));
+  // Corpo expandido: grupos MPPT com as strings de cada um.
+  // Agrupa pelo campo 'mppt' REAL de cada string (nao por aritmetica), o
+  // que suporta topologia ASSIMETRICA: Chint = 2 strings/MPPT, Canadian,
+  // e Huawei SUN2000-250KTL-H1 = 4/5/5/4/5/5 (o antigo round(28/6)=5
+  // quebrava os MPPTs 1 e 4).
   const mpptHtml = d.mppt.map((mppt, m) => {
-    const pvs = [];
-    for (let k = 0; k < strPorMppt; k++) pvs.push(d.strings[m * strPorMppt + k]);
+    const pvs = (d.strings || []).filter(pv => pv && pv.mppt === m + 1);
 
     const strHtml = pvs.map(pv => {
       if (!pv) return "";
@@ -2953,7 +2973,7 @@ function renderCard(idx, d, dispGerando, dispPossiveis, pacMedia06_18, ehHistori
       <span>Tmod: ${fmt(d.tmod, 1)}°C</span>
       <span>Tamb: ${fmt(d.tamb, 1)}°C</span>
       <span>ISO: ${fmt(d.iso, 0)} kΩ</span>
-      <span>${strAtivas}/${NUM_STR} strings ativas</span>
+      <span>${strAtivas}/${(d.strings || []).length} strings ativas</span>
       <span>${d.dataHora}</span>
     </div>
     <div class="mini-chart-wrap" id="mini-wrap-${idx}">
