@@ -1403,9 +1403,12 @@
         <button type="button" class="mt-btn"       data-gmodo="anual"  onclick="trocarModoGeral('anual')">Anual</button>
       </div>
       <label id="geral-lbl-periodo" style="margin-left:12px;display:none">Mês:</label>
+      <label id="geral-lbl-dia" style="margin-left:12px">Dia:</label>
+      <input type="date"   class="date-input" id="geral-day-picker"   max="2099-12-31">
       <input type="month"  class="date-input" id="geral-month-picker" style="display:none" max="2099-12">
       <input type="number" class="date-input" id="geral-year-picker"  style="display:none" min="2024" max="2099" step="1">
       <span class="date-badge" id="geral-date-badge">hoje</span>
+      <button class="btn" id="geral-btn-hoje" onclick="geralIrParaHoje()">Hoje</button>
     </div>
 
     <div class="summary-grid">
@@ -4229,6 +4232,8 @@ let geralTimer  = null;
 
 // Modo de visualização da Visão Geral: "diario" (ao vivo) | "mensal" | "anual"
 let geralModo = "diario";
+let geralDia  = hojeStr();                       // "YYYY-MM-DD" (modo diário)
+let geralSeguindoHoje = true;                    // diário acompanha "hoje" ao vivo
 let geralMes  = hojeStr().slice(0, 7);          // "YYYY-MM"
 let geralAno  = parseInt(hojeStr().slice(0, 4)); // 2026
 
@@ -4434,18 +4439,30 @@ async function carregarVisaoGeral() {
   return _carregarGeralDiario();
 }
 
-// ── Modo DIÁRIO (ao vivo) — resumo de hoje das 3 usinas ──────────────────
+// ── Modo DIÁRIO — resumo de um dia (hoje ao vivo, ou dia escolhido) ──────
 async function _carregarGeralDiario() {
   _geralAplicarLabelsModo("diario");
-  _geralSetLive(true, "atualizando...");
 
-  const hoje = hojeStr();
-  const [ano, mes, dia] = hoje.split("-").map(Number);
+  // Se estamos acompanhando "hoje" ao vivo, rola o dia na virada da meia-noite
+  if (geralSeguindoHoje) {
+    geralDia = hojeStr();
+    const dp = $("geral-day-picker");
+    if (dp) { dp.value = geralDia; dp.max = geralDia; }
+  }
+
+  const ref = geralDia || hojeStr();          // dia de referência
+  const ehHoje = (ref === hojeStr());
+  const [ano, mes, dia] = ref.split("-").map(Number);
+
+  _geralSetLive(ehHoje, ehHoje ? "atualizando..." : _geralDataBR(ref));
+
+  // Sub do card "Geração do dia": hoje vs data histórica
+  set("g-dia-sub", ehHoje ? "soma das usinas · hoje" : "soma das usinas · " + _geralDataBR(ref));
 
   let plants;
   try {
     plants = await Promise.all(
-      _geralSlugsAtivos().map(s => _geralFetchUsina(s, hoje, ano, mes))
+      _geralSlugsAtivos().map(s => _geralFetchUsina(s, ref, ano, mes))
     );
   } catch (e) {
     console.error("Visão Geral falhou:", e);
@@ -4453,7 +4470,7 @@ async function _carregarGeralDiario() {
     return;
   }
 
-  // Semana = últimos 7 dias (hoje .. hoje-6). Se cruzar o mês, busca o anterior.
+  // Semana = 7 dias terminando no dia de referência. Se cruzar o mês, busca o anterior.
   const diasSemana = [];
   for (let i = 0; i < 7; i++) {
     const d = new Date(ano, mes - 1, dia - i);
@@ -4463,7 +4480,7 @@ async function _carregarGeralDiario() {
       String(d.getDate()).padStart(2, "0")
     );
   }
-  const precisaMesAnterior = diasSemana.some(ds => ds.slice(0, 7) !== hoje.slice(0, 7));
+  const precisaMesAnterior = diasSemana.some(ds => ds.slice(0, 7) !== ref.slice(0, 7));
   if (precisaMesAnterior) {
     const prev = new Date(ano, mes - 1, 1); prev.setDate(0); // último dia do mês anterior
     const pa = prev.getFullYear(), pm = prev.getMonth() + 1;
@@ -4474,11 +4491,27 @@ async function _carregarGeralDiario() {
   }
 
   _geralRender(plants, diasSemana);
-  _geralSetLive(true, "ao vivo");
-  set("geral-footer", "última atualização: " + new Date().toLocaleTimeString("pt-BR"));
 
-  clearTimeout(geralTimer);
-  if (VISAO_GERAL) geralTimer = setTimeout(carregarVisaoGeral, INTERVALO * 1000);
+  // Ajusta rótulos relativos ao dia escolhido (semana/mês)
+  set("g-semana-sub", ehHoje ? "últimos 7 dias" : "7 dias até " + String(dia).padStart(2, "0") + "/" + String(mes).padStart(2, "0"));
+  set("g-mes-sub", ehHoje ? "mês corrente" : _mesNomeCurto(mes) + "/" + ano);
+
+  if (ehHoje) {
+    _geralSetLive(true, "ao vivo");
+    set("geral-footer", "última atualização: " + new Date().toLocaleTimeString("pt-BR"));
+    clearTimeout(geralTimer);
+    if (VISAO_GERAL) geralTimer = setTimeout(carregarVisaoGeral, INTERVALO * 1000);
+  } else {
+    _geralSetLive(false, _geralDataBR(ref));
+    set("geral-footer", "dia " + _geralDataBR(ref) + " carregado: " + new Date().toLocaleTimeString("pt-BR"));
+    clearTimeout(geralTimer); geralTimer = null;   // dia histórico não se auto-atualiza
+  }
+}
+
+// "YYYY-MM-DD" -> "DD/MM/YYYY"
+function _geralDataBR(iso) {
+  const p = (iso || "").split("-");
+  return p.length === 3 ? p[2] + "/" + p[1] + "/" + p[0] : iso;
 }
 
 // Formata kWh -> kWh/MWh automaticamente em dois elementos (valor + unidade)
@@ -4950,7 +4983,10 @@ async function _carregarGeralAnual() {
 // ── Toggle de modo + badge ───────────────────────────────────────────────
 function _geralAtualizarBadge() {
   const badge = $("geral-date-badge"); if (!badge) return;
-  if (geralModo === "diario") { badge.textContent = "hoje"; return; }
+  if (geralModo === "diario") {
+    badge.textContent = (geralDia === hojeStr()) ? "hoje" : _geralDataBR(geralDia);
+    return;
+  }
   if (geralModo === "mensal") {
     const [a, m] = geralMes.split("-");
     badge.textContent = (geralMes === hojeStr().slice(0, 7)) ? "mês atual" : (_mesNomeCurto(parseInt(m)) + "/" + a);
@@ -4963,13 +4999,29 @@ function _geralSyncModoUI() {
   document.querySelectorAll('#geral-date-bar .mt-btn').forEach(b => {
     b.classList.toggle('ativo', b.dataset.gmodo === geralModo);
   });
-  const mp = $("geral-month-picker"), yp = $("geral-year-picker"), lbl = $("geral-lbl-periodo");
+  const dp  = $("geral-day-picker"),  lblDia = $("geral-lbl-dia");
+  const mp  = $("geral-month-picker"), yp = $("geral-year-picker"), lbl = $("geral-lbl-periodo");
+  const btn = $("geral-btn-hoje");
   const show = (el, on) => { if (el) el.style.display = on ? "" : "none"; };
-  show(mp, geralModo === "mensal");
-  show(yp, geralModo === "anual");
+  show(dp,  geralModo === "diario");
+  show(lblDia, geralModo === "diario");
+  show(mp,  geralModo === "mensal");
+  show(yp,  geralModo === "anual");
   show(lbl, geralModo !== "diario");
+  // Botão "Hoje" só faz sentido no modo diário quando não é hoje
+  show(btn, geralModo === "diario" && geralDia !== hojeStr());
   if (lbl) lbl.textContent = geralModo === "anual" ? "Ano:" : "Mês:";
   _geralAtualizarBadge();
+}
+
+// Volta o modo diário para "hoje" (ao vivo)
+function geralIrParaHoje() {
+  geralDia = hojeStr();
+  geralSeguindoHoje = true;
+  const dp = $("geral-day-picker");
+  if (dp) { dp.value = geralDia; dp.max = geralDia; }
+  _geralSyncModoUI();
+  carregarVisaoGeral();
 }
 
 function trocarModoGeral(novo) {
@@ -5264,11 +5316,25 @@ document.addEventListener('keydown', function(ev) {
 // foram declaradas acima neste ponto — sem risco de temporal dead zone).
 // ═══════════════════════════════════════════════════════════════════════
 
-// Configura os seletores de mês/ano da Visão Geral (uma única vez).
+// Configura os seletores de dia/mês/ano da Visão Geral (uma única vez).
 (function _geralInitPickers() {
+  const dp = $("geral-day-picker");
   const mp = $("geral-month-picker"), yp = $("geral-year-picker");
+  const hojeDia = hojeStr();
   const hojeMes = hojeStr().slice(0, 7);
   const hojeAno = parseInt(hojeStr().slice(0, 4));
+  if (dp) {
+    dp.value = geralDia || hojeDia;
+    dp.max   = hojeDia;
+    dp.addEventListener("change", () => {
+      geralDia = dp.value || hojeDia;
+      // segurança: não deixa passar de hoje
+      if (geralDia > hojeStr()) { geralDia = hojeStr(); dp.value = geralDia; }
+      geralSeguindoHoje = (geralDia === hojeStr());
+      _geralSyncModoUI();
+      carregarVisaoGeral();
+    });
+  }
   if (mp) {
     mp.value = geralMes || hojeMes;
     mp.max   = hojeMes;
