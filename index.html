@@ -1395,30 +1395,43 @@
   </div>
 
   <div class="main">
+    <!-- Seleção de período: Diário / Mensal / Anual (soma das usinas) -->
+    <div class="date-bar" id="geral-date-bar">
+      <div class="modo-toggle" role="group" aria-label="Modo de visualização">
+        <button type="button" class="mt-btn ativo" data-gmodo="diario" onclick="trocarModoGeral('diario')">Diário</button>
+        <button type="button" class="mt-btn"       data-gmodo="mensal" onclick="trocarModoGeral('mensal')">Mensal</button>
+        <button type="button" class="mt-btn"       data-gmodo="anual"  onclick="trocarModoGeral('anual')">Anual</button>
+      </div>
+      <label id="geral-lbl-periodo" style="margin-left:12px;display:none">Mês:</label>
+      <input type="month"  class="date-input" id="geral-month-picker" style="display:none" max="2099-12">
+      <input type="number" class="date-input" id="geral-year-picker"  style="display:none" min="2024" max="2099" step="1">
+      <span class="date-badge" id="geral-date-badge">hoje</span>
+    </div>
+
     <div class="summary-grid">
       <!-- Geração do dia (soma das usinas) -->
       <div class="kpi">
-        <div class="kpi-label">Geração do dia</div>
+        <div class="kpi-label" id="g-c1-lbl">Geração do dia</div>
         <div><span class="kpi-value" id="g-dia">--</span><span class="kpi-unit" id="g-dia-u">kWh</span></div>
         <div class="kpi-sub" id="g-dia-sub">soma das usinas &middot; hoje</div>
         <svg class="kpi-watermark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="17" height="10" rx="2"/><path d="M21 11v2"/><path d="M6 10v4M10 10v4M14 10v4"/></svg>
       </div>
       <!-- Geração da semana -->
       <div class="kpi">
-        <div class="kpi-label">Geração da semana</div>
+        <div class="kpi-label" id="g-c2-lbl">Geração da semana</div>
         <div><span class="kpi-value" id="g-semana">--</span><span class="kpi-unit" id="g-semana-u">kWh</span></div>
         <div class="kpi-sub" id="g-semana-sub">últimos 7 dias</div>
         <svg class="kpi-watermark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/></svg>
       </div>
       <!-- Geração do mês -->
       <div class="kpi">
-        <div class="kpi-label">Geração do mês</div>
+        <div class="kpi-label" id="g-c3-lbl">Geração do mês</div>
         <div><span class="kpi-value" id="g-mes">--</span><span class="kpi-unit" id="g-mes-u">kWh</span></div>
         <div class="kpi-sub" id="g-mes-sub">mês corrente</div>
         <svg class="kpi-watermark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>
       </div>
       <!-- Inversores online (fleet) -->
-      <div class="kpi kpi-online">
+      <div class="kpi kpi-online" id="g-card-online">
         <div class="kpi-label">Inversores online</div>
         <div><span class="kpi-value" id="g-inv">--</span><span class="kpi-unit" id="g-inv-total">/ --</span></div>
         <div class="geral-inv-chips" id="g-inv-chips"></div>
@@ -1426,7 +1439,7 @@
       </div>
       <!-- Disponibilidade (fleet, 06-18h) -->
       <div class="kpi">
-        <div class="kpi-label">Disponibilidade</div>
+        <div class="kpi-label" id="g-disp-lbl">Disponibilidade</div>
         <div><span class="kpi-value" id="g-disp">--</span><span class="kpi-unit">%</span></div>
         <div class="kpi-sub" id="g-disp-sub">frota &middot; 06:00–18:00 hoje</div>
         <svg class="kpi-watermark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2a10 10 0 1 0 10 10"/><polyline points="8,12 11,15 16,9"/></svg>
@@ -1444,10 +1457,10 @@
     <div class="charts-row" style="grid-template-columns:1fr">
       <div class="chart-card">
         <div class="chart-card-title">
-          <span>Potência das usinas</span>
+          <span id="geral-chart-titulo">Potência das usinas</span>
           <span id="geral-chart-pico" style="font-weight:400;color:var(--amber)"></span>
         </div>
-        <div class="chart-subtitle">Potência total (kW) ao longo do dia &mdash; soma das 3 usinas + curva de cada usina</div>
+        <div class="chart-subtitle" id="geral-chart-sub">Potência total (kW) ao longo do dia &mdash; soma das 3 usinas + curva de cada usina</div>
         <div class="chart-scroll-wrap">
           <div class="chart-inner" style="min-width:100%">
             <canvas id="geral-chart-total"></canvas>
@@ -4214,6 +4227,11 @@ let VISAO_GERAL = true;      // true = aba "Visão Geral" aberta (landing)
 let geralChart  = null;
 let geralTimer  = null;
 
+// Modo de visualização da Visão Geral: "diario" (ao vivo) | "mensal" | "anual"
+let geralModo = "diario";
+let geralMes  = hojeStr().slice(0, 7);          // "YYYY-MM"
+let geralAno  = parseInt(hojeStr().slice(0, 4)); // 2026
+
 // Ordem de exibição (segue a sidebar). Só entram as usinas configuradas.
 const GERAL_ORDEM = ["pk", "linhares", "ibiracu"];
 const GERAL_CORES = { pk: "#FF13F0", linhares: "#58a6ff", ibiracu: "#3fb950" };
@@ -4339,9 +4357,86 @@ async function _geralFetchMesEnergia(slug, ano, mes) {
   return out;
 }
 
-// ── Orquestra a carga da Visão Geral ─────────────────────────────────────
+// Resumo mensal rico de UMA usina: energia por dia, total, disponibilidade
+// média (por_inversor) e comparação PVsyst do mês. Base dos modos Mensal/Anual.
+async function _geralFetchMes(slug, ano, mes) {
+  const base = getApiUrl();
+  const q    = "?usina=" + encodeURIComponent(slug);
+  const a    = String(ano).padStart(4, "0"), m = String(mes).padStart(2, "0");
+  const out  = {
+    slug, ano, mes,
+    nome: (USINAS_COORDS[slug] || {}).topbar || slug,
+    energiaPorData: {},   // "YYYY-MM-DD" -> kWh
+    energiaMes: 0,
+    dispSoma: 0, dispCount: 0,   // média de disponibilidade (% por inversor/dia)
+    pvsyst: null,
+    temDados: false,
+  };
+  try {
+    const r = await fetch(base + "/mensal/" + a + "-" + m + q);
+    if (!r.ok) return out;
+    const d = await r.json();
+    const linhas = [];
+    for (const dd of (d.dias || [])) {
+      const e = dd.energia_kwh || 0;
+      out.energiaMes += e;
+      if (dd.data) out.energiaPorData[dd.data] = e;
+      if (e > 0) out.temDados = true;
+      linhas.push({ data: dd.data, energia_kwh: e });
+    }
+    // Disponibilidade: por_inversor[].dias[].disponibilidade já vem em % (0–100)
+    (d.por_inversor || []).forEach(inv => {
+      (inv.dias || []).forEach(x => {
+        if (x.disponibilidade != null) { out.dispSoma += x.disponibilidade; out.dispCount++; }
+      });
+    });
+    linhas.pvsyst = (d.resumo && d.resumo.pvsyst) ? d.resumo.pvsyst : null;
+    out.pvsyst = _calcPvsystMes(ano, mes, linhas);   // { esperado, realizado } | null
+  } catch (e) {}
+  return out;
+}
+
+// Resumo anual rico de UMA usina: energia por mês + agregados (disp e PVsyst).
+async function _geralFetchAno(slug, ano) {
+  const hoje    = hojeStr();
+  const hojeAno = parseInt(hoje.slice(0, 4)), hojeMes = parseInt(hoje.slice(5, 7));
+  const limite  = (ano === hojeAno) ? hojeMes : 12;
+  const meses   = [];
+  for (let mm = 1; mm <= limite; mm++) meses.push(mm);
+
+  const resultados = await Promise.all(meses.map(mm => _geralFetchMes(slug, ano, mm)));
+  const out = {
+    slug, nome: (USINAS_COORDS[slug] || {}).topbar || slug,
+    energiaPorMes: new Array(12).fill(0),   // idx 0..11
+    energiaAno: 0,
+    dispSoma: 0, dispCount: 0,
+    pvsyst: null, temDados: false,
+  };
+  let pvEsp = 0, pvReal = 0, temPv = false;
+  resultados.forEach((mm, i) => {
+    const idx = meses[i] - 1;
+    out.energiaPorMes[idx] = mm.energiaMes;
+    out.energiaAno        += mm.energiaMes;
+    out.dispSoma          += mm.dispSoma;
+    out.dispCount         += mm.dispCount;
+    if (mm.temDados) out.temDados = true;
+    if (mm.pvsyst && mm.pvsyst.esperado > 0) { pvEsp += mm.pvsyst.esperado; pvReal += mm.pvsyst.realizado; temPv = true; }
+  });
+  out.pvsyst = temPv ? { esperado: pvEsp, realizado: pvReal } : null;
+  return out;
+}
+
+// ── Roteador: escolhe o carregador conforme o modo selecionado ───────────
 async function carregarVisaoGeral() {
   if (!VISAO_GERAL) return;
+  if (geralModo === "mensal") return _carregarGeralMensal();
+  if (geralModo === "anual")  return _carregarGeralAnual();
+  return _carregarGeralDiario();
+}
+
+// ── Modo DIÁRIO (ao vivo) — resumo de hoje das 3 usinas ──────────────────
+async function _carregarGeralDiario() {
+  _geralAplicarLabelsModo("diario");
   _geralSetLive(true, "atualizando...");
 
   const hoje = hojeStr();
@@ -4464,6 +4559,11 @@ function _geralRender(plants, diasSemana) {
 function _geralRenderChart(plants) {
   const cv = $("geral-chart-total");
   if (!cv || typeof Chart === "undefined") return;
+
+  // Restaura título/subtítulo do modo diário (podem ter mudado no mensal/anual)
+  set("geral-chart-titulo", "Potência das usinas");
+  const subEl = $("geral-chart-sub");
+  if (subEl) subEl.textContent = "Potência total (kW) ao longo do dia — soma das usinas + curva de cada usina";
 
   const idxOf = {};
   LABELS_DIA.forEach((l, i) => { idxOf[l] = i; });
@@ -4591,6 +4691,295 @@ function _geralRenderPlants(plants) {
   }).join("");
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// MODOS MENSAL E ANUAL (Visão Geral)
+// ═══════════════════════════════════════════════════════════════════════
+function _mesNomeCurto(m) {
+  return ["", "Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"][m] || ("m" + m);
+}
+function _totalArrSoma(arr) { return arr.reduce((a, b) => a + (b || 0), 0); }
+function _hexA(hex, a) {
+  const h = String(hex || "").replace("#", "");
+  const n = h.length === 3 ? h.split("").map(c => c + c).join("") : h;
+  const r = parseInt(n.slice(0, 2), 16), g = parseInt(n.slice(2, 4), 16), b = parseInt(n.slice(4, 6), 16);
+  if ([r, g, b].some(isNaN)) return hex;
+  return "rgba(" + r + "," + g + "," + b + "," + a + ")";
+}
+
+// Ajusta rótulos/visibilidade dos KPIs conforme o modo ativo
+function _geralAplicarLabelsModo(modo) {
+  const online = $("g-card-online");
+  if (modo === "diario") {
+    set("g-c1-lbl", "Geração do dia");    set("g-dia-sub", "soma das usinas · hoje");
+    set("g-c2-lbl", "Geração da semana"); set("g-semana-sub", "últimos 7 dias");
+    set("g-c3-lbl", "Geração do mês");    set("g-mes-sub", "mês corrente");
+    set("g-disp-lbl", "Disponibilidade"); set("g-disp-sub", "frota · 06:00–18:00 hoje");
+    if (online) online.style.display = "";
+  } else if (modo === "mensal") {
+    set("g-c1-lbl", "Geração do mês");
+    set("g-c2-lbl", "Melhor dia");
+    set("g-c3-lbl", "Média diária");
+    set("g-disp-lbl", "Disponib. (mês)");
+    if (online) online.style.display = "none";
+  } else {
+    set("g-c1-lbl", "Geração do ano");
+    set("g-c2-lbl", "Melhor mês");
+    set("g-c3-lbl", "Média mensal");
+    set("g-disp-lbl", "Disponib. (ano)");
+    if (online) online.style.display = "none";
+  }
+}
+
+// Disponibilidade média do período (média das disponibilidades por inversor/dia)
+function _geralRenderDispPeriodo(plants) {
+  let soma = 0, cnt = 0;
+  for (const pl of plants) { soma += pl.dispSoma || 0; cnt += pl.dispCount || 0; }
+  const disp = cnt > 0 ? soma / cnt : null;
+  set("g-disp", disp == null ? "--" : disp.toFixed(1));
+  const dEl = $("g-disp");
+  if (dEl) dEl.style.color = disp == null ? "" : perfColor(disp);
+  set("g-disp-sub", disp == null ? "sem dados" : "média por inversor");
+}
+
+// PVsyst agregado do período (ignora usinas sem PVsyst) — objetos com .pvsyst
+function _geralRenderPvsystPeriodo(plants) {
+  let esp = 0, real = 0, n = 0;
+  for (const pl of plants) if (pl.pvsyst && pl.pvsyst.esperado > 0) { esp += pl.pvsyst.esperado; real += pl.pvsyst.realizado; n++; }
+  const card = $("g-kpi-pvsyst");
+  if (n === 0 || esp <= 0) { if (card) card.style.display = "none"; return; }
+  if (card) card.style.display = "";
+  const pct = real / esp * 100;
+  set("g-pvsyst", pct.toFixed(0));
+  const pv = $("g-pvsyst");
+  if (pv) pv.style.color = pct >= 100 ? "var(--green)" : pct >= 85 ? "var(--amber)" : "var(--red)";
+  const incl = plants.filter(p => p.pvsyst && p.pvsyst.esperado > 0).map(p => _geralSigla(p.slug)).join(", ");
+  set("g-pvsyst-sub", n + " de " + plants.length + " usinas · " + incl);
+}
+
+// Gráfico de barras empilhadas (mensal/anual): cada usina é um segmento
+function _geralRenderChartBarras(labels, perPlant, totalArr, unidade, titulo, sub) {
+  const cv = $("geral-chart-total");
+  if (!cv || typeof Chart === "undefined") return;
+  set("geral-chart-titulo", titulo);
+  const subEl = $("geral-chart-sub"); if (subEl) subEl.textContent = sub;
+
+  const somaTotal = _totalArrSoma(totalArr);
+  const picoEl = $("geral-chart-pico");
+  if (picoEl) picoEl.textContent = somaTotal > 0
+    ? "total " + (somaTotal >= 1000 ? fmt(somaTotal / 1000, 2) + " MWh" : fmt(somaTotal, 0) + " kWh")
+    : "";
+
+  const datasets = perPlant.map(p => ({
+    label: p.nome, data: p.arr,
+    backgroundColor: _hexA(GERAL_CORES[p.slug] || "#8a94a6", 0.85),
+    borderColor: GERAL_CORES[p.slug] || "#8a94a6", borderWidth: 0,
+    stack: "usinas", borderRadius: 2, borderSkipped: false,
+    categoryPercentage: 0.9, barPercentage: 0.96,
+  }));
+
+  if (geralChart) { try { geralChart.destroy(); } catch (e) {} geralChart = null; }
+
+  geralChart = new Chart(cv.getContext("2d"), {
+    type: "bar",
+    data: { labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: { duration: 300 },
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: "#1c2333", borderColor: "#2a3240", borderWidth: 1,
+          titleColor: "#768390", bodyColor: "#cdd9e5",
+          callbacks: {
+            label: c => "  " + c.dataset.label + "   " + (c.parsed.y || 0).toFixed(1) + " " + unidade,
+            footer: items => "Total: " + items.reduce((a, it) => a + (it.parsed.y || 0), 0).toFixed(1) + " " + unidade,
+          },
+        },
+      },
+      scales: {
+        x: { stacked: true, ticks: { font: { size: 10 }, color: "#768390", maxRotation: 0 }, grid: { display: false }, border: { color: "#2a3240" } },
+        y: { stacked: true, min: 0, ticks: { font: { size: 10 }, color: "#768390", callback: v => v >= 1000 ? (v / 1000).toFixed(1) + " MWh" : v.toFixed(0) + " " + unidade }, grid: { color: "rgba(255,255,255,0.04)" }, border: { color: "#2a3240" } },
+      },
+    },
+  });
+
+  const legEl = $("geral-chart-legend");
+  if (legEl) {
+    legEl.innerHTML = perPlant.map(p =>
+      '<span class="lg"><span class="lg-line" style="border-top-width:8px;border-color:' + (GERAL_CORES[p.slug] || "#8a94a6") + '"></span>' + p.nome + '</span>'
+    ).join("");
+  }
+}
+
+// Cards "por usina" para mensal/anual: geração do período, disponib. e participação
+function _geralRenderPlantsPeriodo(plants, tipo) {
+  const wrap = $("geral-plants"); if (!wrap) return;
+  const chaveGer = tipo === "ano" ? "energiaAno" : "energiaMes";
+  const totalGer = plants.reduce((a, pl) => a + (pl[chaveGer] || 0), 0);
+
+  wrap.innerHTML = plants.map(pl => {
+    const ger  = pl[chaveGer] || 0;
+    const disp = pl.dispCount > 0 ? pl.dispSoma / pl.dispCount : null;
+    const dispCls = disp == null ? "" : disp >= 80 ? "good" : disp >= 50 ? "warn" : "bad";
+    const part = totalGer > 0 ? (ger / totalGer * 100) : 0;
+    const gerTxt = Math.abs(ger) >= 1000
+      ? fmt(ger / 1000, 2) + '<small>MWh</small>'
+      : fmt(ger, 1) + '<small>kWh</small>';
+    const temDados = ger > 0;
+
+    return '' +
+      '<div class="gp-card' + (temDados ? '' : ' sem-dados') + '">' +
+        '<div class="gp-card-link" onclick="trocarUsina(\'' + pl.slug + '\')" title="Abrir ' + pl.nome + '"></div>' +
+        '<div class="gp-head">' +
+          '<div class="gp-name"><span class="gp-dot ' + (temDados ? 'ok' : '') + '"></span>' + pl.nome + '</div>' +
+          '<div class="gp-pac">' + part.toFixed(0) + '% do total</div>' +
+        '</div>' +
+        '<div class="gp-metrics">' +
+          '<div class="gp-metric">' +
+            '<span class="gp-metric-lbl">Geração ' + (tipo === "ano" ? "ano" : "mês") + '</span>' +
+            '<span class="gp-metric-val">' + gerTxt + '</span>' +
+          '</div>' +
+          '<div class="gp-metric">' +
+            '<span class="gp-metric-lbl">Dispon.</span>' +
+            '<span class="gp-metric-val ' + dispCls + '">' + (disp == null ? '--' : disp.toFixed(0) + '<small>%</small>') + '</span>' +
+          '</div>' +
+          '<div class="gp-metric">' +
+            '<span class="gp-metric-lbl">Partic.</span>' +
+            '<span class="gp-metric-val">' + part.toFixed(0) + '<small>%</small></span>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+  }).join("");
+}
+
+// ── Modo MENSAL ──────────────────────────────────────────────────────────
+async function _carregarGeralMensal() {
+  _geralAplicarLabelsModo("mensal");
+  _geralSetLive(false, "mês");
+  const [ano, mes] = geralMes.split("-").map(Number);
+
+  let plants;
+  try {
+    plants = await Promise.all(_geralSlugsAtivos().map(s => _geralFetchMes(s, ano, mes)));
+  } catch (e) { console.error(e); _geralSetLive(false, "erro"); return; }
+
+  const diasNoMes = new Date(ano, mes, 0).getDate();
+  const labels = [];
+  for (let d = 1; d <= diasNoMes; d++) labels.push(String(d));
+
+  const totalPorDia = new Array(diasNoMes).fill(0);
+  const perPlant = plants.map(pl => {
+    const arr = new Array(diasNoMes).fill(0);
+    for (let d = 1; d <= diasNoMes; d++) {
+      const key = ano + "-" + String(mes).padStart(2, "0") + "-" + String(d).padStart(2, "0");
+      const e = pl.energiaPorData[key] || 0;
+      arr[d - 1] = e; totalPorDia[d - 1] += e;
+    }
+    return { slug: pl.slug, nome: pl.nome, arr };
+  });
+
+  let mesTot = 0, melhorKwh = 0, melhorDia = 0, diasComGer = 0;
+  for (let d = 1; d <= diasNoMes; d++) {
+    const e = totalPorDia[d - 1];
+    mesTot += e;
+    if (e > 0) diasComGer++;
+    if (e > melhorKwh) { melhorKwh = e; melhorDia = d; }
+  }
+  const media = diasComGer > 0 ? mesTot / diasComGer : 0;
+
+  _geralSetEnergia("g-dia", "g-dia-u", mesTot);
+  _geralSetEnergia("g-semana", "g-semana-u", melhorKwh);
+  set("g-semana-sub", melhorDia ? ("dia " + String(melhorDia).padStart(2, "0") + "/" + String(mes).padStart(2, "0")) : "—");
+  _geralSetEnergia("g-mes", "g-mes-u", media);
+  set("g-mes-sub", diasComGer > 0 ? ("em " + diasComGer + (diasComGer > 1 ? " dias" : " dia")) : "—");
+
+  _geralRenderDispPeriodo(plants);
+  _geralRenderPvsystPeriodo(plants);
+  _geralRenderChartBarras(labels, perPlant, totalPorDia, "kWh",
+    "Energia diária das usinas",
+    "Energia gerada por dia (kWh) — empilhada por usina — " + _mesNomeCurto(mes) + "/" + ano);
+  _geralRenderPlantsPeriodo(plants, "mês");
+
+  _geralSetLive(false, "mês");
+  set("geral-footer", "mês " + geralMes + " carregado: " + new Date().toLocaleTimeString("pt-BR"));
+}
+
+// ── Modo ANUAL ───────────────────────────────────────────────────────────
+async function _carregarGeralAnual() {
+  _geralAplicarLabelsModo("anual");
+  _geralSetLive(false, "ano");
+  const ano = geralAno;
+
+  let plants;
+  try {
+    plants = await Promise.all(_geralSlugsAtivos().map(s => _geralFetchAno(s, ano)));
+  } catch (e) { console.error(e); _geralSetLive(false, "erro"); return; }
+
+  const NOMES_MES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+  const totalPorMes = new Array(12).fill(0);
+  plants.forEach(pl => { for (let i = 0; i < 12; i++) totalPorMes[i] += pl.energiaPorMes[i]; });
+
+  let anoTot = 0, melhorKwh = 0, melhorMes = 0, mesesComGer = 0;
+  for (let i = 0; i < 12; i++) {
+    const e = totalPorMes[i];
+    anoTot += e;
+    if (e > 0) mesesComGer++;
+    if (e > melhorKwh) { melhorKwh = e; melhorMes = i + 1; }
+  }
+  const media = mesesComGer > 0 ? anoTot / mesesComGer : 0;
+
+  _geralSetEnergia("g-dia", "g-dia-u", anoTot);
+  _geralSetEnergia("g-semana", "g-semana-u", melhorKwh);
+  set("g-semana-sub", melhorMes ? NOMES_MES[melhorMes - 1] + "/" + ano : "—");
+  _geralSetEnergia("g-mes", "g-mes-u", media);
+  set("g-mes-sub", mesesComGer > 0 ? ("em " + mesesComGer + (mesesComGer > 1 ? " meses" : " mês")) : "—");
+
+  _geralRenderDispPeriodo(plants);
+  _geralRenderPvsystPeriodo(plants);
+  _geralRenderChartBarras(NOMES_MES,
+    plants.map(pl => ({ slug: pl.slug, nome: pl.nome, arr: pl.energiaPorMes })),
+    totalPorMes, "kWh",
+    "Energia mensal das usinas",
+    "Energia gerada por mês (kWh) — empilhada por usina — " + ano);
+  _geralRenderPlantsPeriodo(plants, "ano");
+
+  _geralSetLive(false, "ano");
+  set("geral-footer", "ano " + ano + " carregado: " + new Date().toLocaleTimeString("pt-BR"));
+}
+
+// ── Toggle de modo + badge ───────────────────────────────────────────────
+function _geralAtualizarBadge() {
+  const badge = $("geral-date-badge"); if (!badge) return;
+  if (geralModo === "diario") { badge.textContent = "hoje"; return; }
+  if (geralModo === "mensal") {
+    const [a, m] = geralMes.split("-");
+    badge.textContent = (geralMes === hojeStr().slice(0, 7)) ? "mês atual" : (_mesNomeCurto(parseInt(m)) + "/" + a);
+    return;
+  }
+  badge.textContent = (geralAno === parseInt(hojeStr().slice(0, 4))) ? "ano atual" : String(geralAno);
+}
+
+function _geralSyncModoUI() {
+  document.querySelectorAll('#geral-date-bar .mt-btn').forEach(b => {
+    b.classList.toggle('ativo', b.dataset.gmodo === geralModo);
+  });
+  const mp = $("geral-month-picker"), yp = $("geral-year-picker"), lbl = $("geral-lbl-periodo");
+  const show = (el, on) => { if (el) el.style.display = on ? "" : "none"; };
+  show(mp, geralModo === "mensal");
+  show(yp, geralModo === "anual");
+  show(lbl, geralModo !== "diario");
+  if (lbl) lbl.textContent = geralModo === "anual" ? "Ano:" : "Mês:";
+  _geralAtualizarBadge();
+}
+
+function trocarModoGeral(novo) {
+  if (!["diario", "mensal", "anual"].includes(novo)) return;
+  geralModo = novo;
+  _geralSyncModoUI();
+  clearTimeout(geralTimer); geralTimer = null;   // só o modo diário se auto-atualiza
+  carregarVisaoGeral();
+}
+
 // ── Abrir / fechar a aba ─────────────────────────────────────────────────
 function _geralSetLive(ativo, rotulo) {
   const pill = $("geral-auto-pill");
@@ -4611,6 +5000,7 @@ function abrirVisaoGeral() {
   // Pausa o ciclo da usina individual enquanto a Visão Geral está aberta
   try { clearInterval(countdownTimer); } catch (e) {}
   try { setAutoLive(false); } catch (e) {}
+  _geralSyncModoUI();
   carregarVisaoGeral();
   try { window.scrollTo(0, 0); } catch (e) {}
 }
@@ -4873,6 +5263,34 @@ document.addEventListener('keydown', function(ev) {
 // PÁGINA INICIAL: abre a Visão Geral (todas as variáveis de estado já
 // foram declaradas acima neste ponto — sem risco de temporal dead zone).
 // ═══════════════════════════════════════════════════════════════════════
+
+// Configura os seletores de mês/ano da Visão Geral (uma única vez).
+(function _geralInitPickers() {
+  const mp = $("geral-month-picker"), yp = $("geral-year-picker");
+  const hojeMes = hojeStr().slice(0, 7);
+  const hojeAno = parseInt(hojeStr().slice(0, 4));
+  if (mp) {
+    mp.value = geralMes || hojeMes;
+    mp.max   = hojeMes;
+    mp.addEventListener("change", () => {
+      geralMes = mp.value || hojeMes;
+      _geralAtualizarBadge();
+      carregarVisaoGeral();
+    });
+  }
+  if (yp) {
+    yp.value = geralAno || hojeAno;
+    yp.max   = hojeAno;
+    yp.addEventListener("change", () => {
+      const v = parseInt(yp.value);
+      geralAno = (!isNaN(v) && v >= 2024 && v <= hojeAno) ? v : hojeAno;
+      yp.value = geralAno;
+      _geralAtualizarBadge();
+      carregarVisaoGeral();
+    });
+  }
+})();
+
 abrirVisaoGeral();
 
 </script>
