@@ -730,6 +730,12 @@
     }
     @media (max-width: 720px) { .mppt-grid { grid-template-columns: repeat(2,1fr); } }
 
+    /* Aviso para inversores que nao reportam DC (ex.: Solarman) */
+    .sem-dc {
+      padding: 14px; border: 1px dashed var(--border); border-radius: 8px;
+      color: var(--text3); font-size: 12px; text-align: center;
+    }
+
     .mppt-box {
       border: 1px solid var(--border-soft);
       border-radius: var(--r-sm);
@@ -1771,7 +1777,7 @@ function getApiUrl() {
 // ===== PREVISAO DO TEMPO (Open-Meteo) =====
 const USINAS_COORDS = {
   pk:       { lat: -21.10, lon: -41.04, nome: "Pres. Kennedy / ES", topbar: "Presidente Kennedy", inversores: 8 },
-  linhares: { lat: -19.39, lon: -40.07, nome: "Linhares / ES",      topbar: "Linhares",            inversores: 1 },
+  linhares: { lat: -19.39, lon: -40.07, nome: "Linhares / ES",      topbar: "Linhares",            inversores: 2 },
   ibiracu:  { lat: -19.83, lon: -40.37, nome: "Ibiraçu / ES",       topbar: "Ibiraçu",             inversores: 10 },
 };
 
@@ -1981,9 +1987,15 @@ const USINAS_CONFIG = {
     numMppt: 6, numStr: 28,           // maioria: 8 dos 10 sao Huawei
   },
   linhares: {
-    nomes: ["Inversor 1"],
+    // 2 inversores Canadian de 250 kW, em PLATAFORMAS diferentes:
+    //   Inversor 1 = Smart Energy / CSI  (fonte 'canadian') — 12 entradas
+    //   Inversor 2 = Solarman            (fonte 'solarman') —  4 entradas,
+    //                hoje sem reportar DC (falha do datalogger): o card
+    //                oculta a secao de string/MPPT automaticamente.
+    nomes: ["Inversor 1","Inversor 2"],
     csvDirBd:   "/Banco%20de%20Dados/linhares",
-    numMppt: 12, numStr: 24,          // Canadian: 2 strings por MPPT
+    // Reserva apenas: a topologia real vem por inversor, dos dados da API.
+    numMppt: 12, numStr: 24,
   },
 };
 
@@ -2980,23 +2992,36 @@ function renderCard(idx, d, dispGerando, dispPossiveis, pacMedia06_18, ehHistori
   }).join("");
 
   const strAtivas = d.strings.filter(s => s.i > 0.5).length;
+
+  // Alguns inversores nao reportam DC (ex.: o Solarman, cujo datalogger
+  // devolve DV/DC/DP = 0.00 mesmo gerando — falha confirmada no portal).
+  // Regra: so OCULTA a secao quando o inversor esta GERANDO em CA mas nao
+  // reporta CC nenhuma — que e exatamente a assinatura da falha. A noite
+  // (pac = 0) tudo e zero por natureza, entao a grade continua aparecendo
+  // normalmente, como nas demais marcas.
+  const dcZerado = !((d.mppt || []).some(m => m && (m.v > 0.5 || m.i > 0.05)) ||
+                     (d.strings || []).some(s => s && (s.i > 0.05 || s.p > 1)));
+  const temDC = !(dcZerado && d.pac_kw > 0.5);
+
   const body = $("ibody-" + idx);
   if (body) body.innerHTML = `
     <div class="body-meta">
-      <span>DC: ${fmt(d.pdc_kw)} kW</span>
+      ${temDC ? `<span>DC: ${fmt(d.pdc_kw)} kW</span>` : ""}
       <span>TYield: ${fmt(d.ty_kwh, 1)} kWh</span>
       <span>Freq: ${fmt(d.freq, 2)} Hz</span>
       <span>Tmod: ${fmt(d.tmod, 1)}°C</span>
-      <span>Tamb: ${fmt(d.tamb, 1)}°C</span>
-      <span>ISO: ${fmt(d.iso, 0)} kΩ</span>
-      <span>${strAtivas}/${(d.strings || []).length} strings ativas</span>
+      ${d.tamb > 0 ? `<span>Tamb: ${fmt(d.tamb, 1)}°C</span>` : ""}
+      ${d.iso  > 0 ? `<span>ISO: ${fmt(d.iso, 0)} kΩ</span>` : ""}
+      ${temDC ? `<span>${strAtivas}/${(d.strings || []).length} strings ativas</span>` : ""}
       <span>${d.dataHora}</span>
     </div>
     <div class="mini-chart-wrap" id="mini-wrap-${idx}">
       <div class="mini-chart-title">Potência instantânea — ${d.nome ?? NOMES[idx]}</div>
       <div class="mini-chart-box"><canvas id="mini-chart-${idx}"></canvas></div>
     </div>
-    <div class="mppt-grid">${mpptHtml}</div>`;
+    ${temDC
+      ? `<div class="mppt-grid">${mpptHtml}</div>`
+      : `<div class="sem-dc">Este inversor não reporta dados de string/MPPT.</div>`}`;
 
   // Renderiza/atualiza o mini-grafico apos o canvas existir no DOM.
   // E feito SEMPRE que renderCard roda; se o card estiver colapsado,
