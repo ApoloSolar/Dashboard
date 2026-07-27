@@ -1860,11 +1860,13 @@
       <div class="kpi-sub" id="s-dia-sub">soma dos inversores</div>
       <svg class="kpi-watermark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="17" height="10" rx="2"/><path d="M21 11v2"/><path d="M6 10v4M10 10v4M14 10v4"/></svg>
     </div>
-    <div class="kpi">
-      <div class="kpi-label">Inversores online</div>
+    <!-- Diário: inversores online · Mensal/Anual: energia média do período -->
+    <div class="kpi" id="kpi-inv">
+      <div class="kpi-label" id="s-inv-lbl">Inversores online</div>
       <div><span class="kpi-value" id="s-inv">--</span><span class="kpi-unit" id="s-inv-total">/ 8</span></div>
-      <div class="kpi-sub">com geração positiva</div>
-      <svg class="kpi-watermark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12 q 2 -7 4 0 t 4 0 t 4 0 t 4 0"/></svg>
+      <div class="kpi-sub" id="s-inv-sub">com geração positiva</div>
+      <svg class="kpi-watermark" id="s-inv-wm-online" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12 q 2 -7 4 0 t 4 0 t 4 0 t 4 0"/></svg>
+      <svg class="kpi-watermark" id="s-inv-wm-media" style="display:none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7.5 18v-5M12 18v-8M16.5 18v-3"/><path d="M5 11h15" stroke-dasharray="2.5 2.5"/></svg>
     </div>
     <!-- Geração realizada vs prevista pelo PVsyst (só nos modos Mensal/Anual) -->
     <div class="kpi" id="kpi-pvsyst" style="display:none">
@@ -2436,6 +2438,7 @@ function trocarModo(novo) {
   if (novo === "diario") {
     _restaurarKpiTempoDiario();
     _restaurarKpiUltimaLeitura();
+    _restaurarKpiInversoresOnline();
     _setLabelKpi(".kpi-pac", "Potência AC total");
     _setLabelKpi(".kpi:has(#s-dia)", "Energia do dia");
     // Restaura subs e deltas
@@ -3770,7 +3773,7 @@ async function _atualizarPvsystDoDia() {
 }
 
 function _zerarKpisInstantaneos() {
-  set("s-inv",  "—");
+  // s-inv não é mais zerado: o card vira "Energia média" via _renderKpiEnergiaMedia()
   set("s-freq", "—");
   set("s-hora", "—");
   set("s-data", "");
@@ -3782,6 +3785,70 @@ function _zerarKpisInstantaneos() {
 function _restaurarKpiUltimaLeitura() {
   const kpiHora = document.querySelector(".kpi:has(#s-hora)");
   if (kpiHora) kpiHora.style.display = "";
+}
+
+// ============================================================
+// KPI reaproveitado: "Inversores online" ⇄ "Energia média"
+// ------------------------------------------------------------
+// Inversores online é um dado INSTANTÂNEO — num período agregado
+// ele não significa nada (ficava sempre em "—"). Então nos modos
+// Mensal e Anual o card passa a mostrar a energia média:
+//   • Mensal → kWh/dia  (energia do mês ÷ dias com geração)
+//   • Anual  → kWh/mês  (energia do ano ÷ meses com geração)
+// A média usa só os períodos que geraram, para não ser diluída por
+// dias/meses futuros ou sem dado.
+// ============================================================
+function _kpiInvWatermark(qual) {
+  const on = $("s-inv-wm-online"), md = $("s-inv-wm-media");
+  if (on) on.style.display = (qual === "online") ? "" : "none";
+  if (md) md.style.display = (qual === "media")  ? "" : "none";
+}
+
+// escala: "dia" (modo mensal) | "mes" (modo anual)
+function _renderKpiEnergiaMedia(totalKwh, n, escala) {
+  const card = $("kpi-inv");
+  if (!card) return;
+  card.style.display = "";
+
+  const ehDia = (escala === "dia");
+  set("s-inv-lbl", ehDia ? "Energia média diária" : "Energia média mensal");
+
+  const val = $("s-inv"), un = $("s-inv-total"), sub = $("s-inv-sub");
+  const media = (n > 0) ? (totalKwh / n) : null;
+
+  if (media === null) {
+    if (val) val.textContent = "--";
+    if (un)  un.textContent  = ehDia ? "kWh/dia" : "kWh/mês";
+    if (sub) sub.textContent = "sem geração no período";
+  } else {
+    // Mesma regra de unidade automática dos outros KPIs (≥ 1000 kWh → MWh)
+    if (Math.abs(media) >= 1000) {
+      if (val) val.textContent = fmt(media / 1000, 2);
+      if (un)  un.textContent  = ehDia ? "MWh/dia" : "MWh/mês";
+    } else {
+      if (val) val.textContent = fmt(media, 1);
+      if (un)  un.textContent  = ehDia ? "kWh/dia" : "kWh/mês";
+    }
+    if (sub) {
+      const unidadeTxt = ehDia ? (n > 1 ? "dias" : "dia") : (n > 1 ? "meses" : "mês");
+      sub.textContent = "média de " + n + " " + unidadeTxt + " com geração";
+    }
+  }
+  _kpiInvWatermark("media");
+}
+
+// Volta o card ao estado original (modo diário)
+function _restaurarKpiInversoresOnline() {
+  const card = $("kpi-inv");
+  if (!card) return;
+  card.style.display = "";
+  set("s-inv-lbl", "Inversores online");
+  set("s-inv", "--");
+  const un = $("s-inv-total");
+  if (un) un.textContent = "/ " + NOMES.length;
+  const sub = $("s-inv-sub");
+  if (sub) sub.textContent = "com geração positiva";
+  _kpiInvWatermark("online");
 }
 
 // Interpola cor entre vermelho (#f85149) → amarelo (#FFC83D) → verde (#3fb950)
@@ -4111,6 +4178,14 @@ async function atualizarMensal() {
       });
     }
 
+    // Dias que efetivamente geraram no período considerado — base da média diária
+    let diasComGeracao = 0;
+    linhas.forEach(l => {
+      const dia = parseInt(l.data.slice(8, 10));
+      if (ehMesEmCurso && dia > diaCorte) return;   // ignora dias futuros
+      if (l.energia_kwh > 0) diasComGeracao++;
+    });
+
     // Busca resumo do mês anterior em paralelo
     let mesAntAno = ano, mesAntMes = mes - 1;
     if (mesAntMes === 0) { mesAntMes = 12; mesAntAno = ano - 1; }
@@ -4161,6 +4236,9 @@ async function atualizarMensal() {
     _renderKpiPvsyst(cpv ? cpv.esperado : null, cpv ? cpv.realizado : 0, cpv ? cpv.rotulo : "");
 
     _zerarKpisInstantaneos();
+
+    // KPI "Inversores online" → "Energia média diária" (kWh/dia)
+    _renderKpiEnergiaMedia(energiaTotal, diasComGeracao, "dia");
 
     // KPI tempo: sparkline de insolação
     _renderSparklineInsolacao(linhas);
@@ -4323,6 +4401,11 @@ async function atualizarAnual() {
                      (ano === hojeAno) ? "ano até " + NOMES_MES[mesLimite] : "ano fechado");
 
     _zerarKpisInstantaneos();
+
+    // KPI "Inversores online" → "Energia média mensal" (kWh/mês)
+    const mesesComGeracao = linhasAno.filter(l => l.energia_kwh > 0).length;
+    _renderKpiEnergiaMedia(energiaAno, mesesComGeracao, "mes");
+
     _renderSparklineInsolacao(linhasAno);
 
     atualizarGraficosAgregados(linhasAno, "mes");
