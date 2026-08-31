@@ -1333,7 +1333,7 @@
     .plant-info:active { transform: translateY(1px); }
     .plant-info:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
 
-    .pi-summary { display: flex; align-items: center; gap: 14px; flex: 1; min-width: 0; }
+    .pi-summary { display: flex; align-items: center; gap: 14px; flex-shrink: 0; min-width: 0; }
     .pi-badge {
       width: 38px; height: 38px; border-radius: 9px;
       background: var(--amber-dim);
@@ -1355,6 +1355,34 @@
       letter-spacing: .01em;
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
+
+    /* Mini-KPIs embutidos no próprio card clicável */
+    .pi-card-kpis {
+      display: flex; align-items: stretch; gap: 8px;
+      flex: 1; min-width: 0;
+      overflow-x: auto; scrollbar-width: none;
+    }
+    .pi-card-kpis::-webkit-scrollbar { display: none; }
+    .pi-card-kpi {
+      background: var(--bg3); border: 1px solid var(--border);
+      border-radius: var(--r-sm); padding: 8px 14px;
+      display: flex; flex-direction: column; gap: 3px;
+      flex: 1 1 0; min-width: 108px;
+    }
+    .pi-card-kpi-label {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 9px; text-transform: uppercase; letter-spacing: .1em;
+      color: var(--text3); font-weight: 500;
+      white-space: nowrap;
+    }
+    .pi-card-kpi-value {
+      font-size: 15px; font-weight: 700; color: var(--text);
+      letter-spacing: -0.01em; white-space: nowrap;
+    }
+    .pi-card-kpi-value .pi-card-kpi-unit {
+      font-size: 11px; font-weight: 600; color: var(--amber); margin-left: 3px;
+    }
+
     .pi-chevron {
       width: 30px; height: 30px; border-radius: 7px;
       background: var(--bg3); border: 1px solid var(--border);
@@ -1366,9 +1394,13 @@
     .plant-info:hover .pi-chevron { color: var(--amber); border-color: var(--amber-line); transform: translateX(2px); }
     .pi-chevron svg { width: 15px; height: 15px; }
 
+    @media (max-width: 900px) {
+      .pi-summary-text { display: none; }
+    }
     @media (max-width: 720px) {
       .plant-info { padding: 11px 14px; }
-      .pi-summary-sub { display: none; }
+      .pi-card-kpi { min-width: 92px; padding: 7px 11px; }
+      .pi-card-kpi-value { font-size: 13.5px; }
     }
 
     /* ═══════════════════════════════════════════ MODAL — INFORMAÇÕES DA USINA ── */
@@ -1441,8 +1473,8 @@
       font-size: 9px; text-transform: uppercase; letter-spacing: .1em;
       color: var(--text3); font-weight: 500;
     }
-    .pi-kpi-value { font-size: 16px; font-weight: 700; color: var(--amber); letter-spacing: -0.01em; }
-    .pi-kpi-value span.pi-kpi-unit { font-size: 11px; font-weight: 500; color: var(--text3); margin-left: 2px; }
+    .pi-kpi-value { font-size: 16px; font-weight: 700; color: var(--text); letter-spacing: -0.01em; }
+    .pi-kpi-value span.pi-kpi-unit { font-size: 11px; font-weight: 600; color: var(--amber); margin-left: 3px; }
 
     .pi-section { margin-bottom: 18px; }
     .pi-section:last-child { margin-bottom: 0; }
@@ -1907,9 +1939,10 @@
       <div class="pi-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="16" x2="12" y2="11.5"/><circle cx="12" cy="8" r=".6" fill="currentColor" stroke="none"/></svg></div>
       <div class="pi-summary-text">
         <div class="pi-summary-title" id="pi-sum-title">Informações da usina</div>
-        <div class="pi-summary-sub" id="pi-sum-sub">carregando ficha técnica...</div>
+        <div class="pi-summary-sub">ver ficha técnica</div>
       </div>
     </div>
+    <div class="pi-card-kpis" id="pi-card-kpis"></div>
     <div class="pi-chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9,6 15,12 9,18"/></svg></div>
   </button>
 
@@ -5796,13 +5829,14 @@ function renderInfoUsina() {
   const info = USINA_INFO[slug];
   if (!info) return;
 
-  // Card resumo (fechado)
+  // Card resumo (fechado) — mini-KPIs no próprio card
   const titleEl = document.getElementById('pi-sum-title');
-  const subEl   = document.getElementById('pi-sum-sub');
+  const cardKpisEl = document.getElementById('pi-card-kpis');
   if (titleEl) titleEl.textContent = info.nome;
-  if (subEl) {
-    const p = info.kpis.map(k => `${k.value} ${k.unit}`).join('  ·  ');
-    subEl.textContent = p;
+  if (cardKpisEl) {
+    cardKpisEl.innerHTML = info.kpis.map(k =>
+      `<div class="pi-card-kpi"><div class="pi-card-kpi-label">${k.label}</div><div class="pi-card-kpi-value">${k.value}<span class="pi-card-kpi-unit">${k.unit}</span></div></div>`
+    ).join('');
   }
 
   // Modal
